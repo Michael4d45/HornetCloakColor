@@ -39,8 +39,20 @@ namespace HornetCloakColor.Client
         public ConfigEntry<string> CustomHex { get; }
         public ConfigEntry<bool> DebugLogging { get; }
 
+        // Cloak-only shader controls. When CloakOnlyMode is enabled and the embedded
+        // shader bundle is available, only red-dominant pixels are recolored. Otherwise
+        // the legacy whole-character vertex tint is used as a fallback.
+        public ConfigEntry<bool> CloakOnlyMode { get; }
+        public ConfigEntry<float> CloakCenterHue { get; }
+        public ConfigEntry<float> CloakHueWidth { get; }
+        public ConfigEntry<float> CloakMinSaturation { get; }
+        public ConfigEntry<float> CloakStrength { get; }
+
         /// <summary>Fires when the effective cloak color changes.</summary>
         public event Action<CloakColor>? ColorChanged;
+
+        /// <summary>Fires when any of the cloak-shader parameters change (mode, hue range, strength).</summary>
+        public event Action? ShaderSettingsChanged;
 
         public CloakColorConfig(ConfigFile config)
         {
@@ -56,6 +68,48 @@ namespace HornetCloakColor.Client
                 DefaultCustom.ToString(),
                 "Custom cloak color used when preset is set to 'Custom'. Accepts #RRGGBB, RRGGBB, or 'r,g,b' (0-255 each).");
 
+            CloakOnlyMode = config.Bind(
+                "Appearance",
+                "Cloak Only Mode",
+                true,
+                "When true, only the red cloak is recolored (requires the embedded shader bundle). "
+                + "When false, the entire character sprite is tinted the chosen color.");
+
+            CloakCenterHue = config.Bind(
+                "Advanced",
+                "Cloak Center Hue",
+                0.98f,
+                new ConfigDescription(
+                    "Center of the hue range that counts as 'cloak' in the source texture. "
+                    + "0/1 = red, 0.33 = green, 0.66 = blue.",
+                    new AcceptableValueRange<float>(0f, 1f)));
+
+            CloakHueWidth = config.Bind(
+                "Advanced",
+                "Cloak Hue Width",
+                0.50f,
+                new ConfigDescription(
+                    "Half-width of the matched hue band on each side of the center hue. "
+                    + "Larger values include more pixels (and risk catching non-cloak reds).",
+                    new AcceptableValueRange<float>(0f, 0.5f)));
+
+            CloakMinSaturation = config.Bind(
+                "Advanced",
+                "Cloak Min Saturation",
+                0.30f,
+                new ConfigDescription(
+                    "Minimum saturation a pixel needs to be considered part of the cloak. "
+                    + "Keeps the tint off white/grey pixels (mask, eyes, etc).",
+                    new AcceptableValueRange<float>(0f, 1f)));
+
+            CloakStrength = config.Bind(
+                "Advanced",
+                "Cloak Recolor Strength",
+                1.0f,
+                new ConfigDescription(
+                    "How strongly the cloak is recolored. 0 = original cloak, 1 = full recolor.",
+                    new AcceptableValueRange<float>(0f, 1f)));
+
             DebugLogging = config.Bind(
                 "Debug",
                 "Debug Logging",
@@ -64,6 +118,12 @@ namespace HornetCloakColor.Client
 
             PresetChoice.SettingChanged += (_, _) => ColorChanged?.Invoke(CurrentColor);
             CustomHex.SettingChanged += (_, _) => ColorChanged?.Invoke(CurrentColor);
+
+            CloakOnlyMode.SettingChanged       += (_, _) => ShaderSettingsChanged?.Invoke();
+            CloakCenterHue.SettingChanged      += (_, _) => ShaderSettingsChanged?.Invoke();
+            CloakHueWidth.SettingChanged       += (_, _) => ShaderSettingsChanged?.Invoke();
+            CloakMinSaturation.SettingChanged  += (_, _) => ShaderSettingsChanged?.Invoke();
+            CloakStrength.SettingChanged       += (_, _) => ShaderSettingsChanged?.Invoke();
         }
 
         /// <summary>

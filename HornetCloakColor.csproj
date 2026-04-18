@@ -20,7 +20,7 @@
     <PathMap Condition="'$(Configuration)' == 'Release'">$(MSBuildProjectDirectory)=/</PathMap>
 
     <AssemblyTitle>HornetCloakColor</AssemblyTitle>
-    <Version>0.1.0</Version>
+    <Version>1.0.0</Version>
 
     <BepInExPluginGuid>hornet.cloak.color</BepInExPluginGuid>
     <BepInExPluginName>HornetCloakColor</BepInExPluginName>
@@ -70,6 +70,23 @@
     <None Include="README.md" Pack="True" PackagePath="README.md" />
     <None Include="thunderstore/icon.png" Pack="True" PackagePath="icon.png" Condition="Exists('thunderstore/icon.png')" />
   </ItemGroup>
+
+  <!--
+  Embed the cloak-tint shader bundle into the DLL so end users only have to copy
+  HornetCloakColor.dll into BepInEx/plugins. The bundle is built from a Unity
+  project (see Shaders/README.md) and is gitignored to avoid committing binaries.
+  If the file is missing the mod still works — it falls back to tinting the whole
+  character via the tk2dSprite vertex color.
+  -->
+  <ItemGroup Condition="Exists('Resources/cloakshader.bundle')">
+    <EmbeddedResource Include="Resources/cloakshader.bundle">
+      <LogicalName>HornetCloakColor.Resources.cloakshader.bundle</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+  <Target Name="WarnIfShaderBundleMissing" BeforeTargets="CoreCompile" Condition="!Exists('Resources/cloakshader.bundle')">
+    <Message Importance="High"
+             Text="Cloak shader bundle missing at Resources/cloakshader.bundle. Cloak-only mode will fall back to whole-character tint at runtime. See Shaders/README.md to bake one." />
+  </Target>
 
   <Target Name="CopyAndPackageMod" AfterTargets="PostBuildEvent">
     <ItemGroup>

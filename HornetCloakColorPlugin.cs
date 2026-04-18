@@ -17,7 +17,7 @@ namespace HornetCloakColor
         /// Keep this in sync with &lt;Version&gt; in HornetCloakColor.csproj. The BepInAutoPlugin
         /// attribute requires a compile-time constant, so we can't read from the csproj directly.
         /// </summary>
-        public const string ModVersion = "0.1.0";
+        public const string ModVersion = "1.0.0";
 
         internal static HornetCloakColorPlugin? Instance { get; private set; }
         internal CloakColorConfig ColorConfig { get; private set; } = null!;
@@ -37,10 +37,19 @@ namespace HornetCloakColor
             // Whenever the user changes the config, push the new color to local Hornet + network.
             ColorConfig.ColorChanged += OnConfigColorChanged;
 
+            // Cloak-only toggle / hue range tweaks: just refresh the existing CloakRecolor
+            // components — no need to renegotiate the color over the network.
+            ColorConfig.ShaderSettingsChanged += OnShaderSettingsChanged;
+
             // Also apply the initial color as soon as the hero exists in the scene (menu -> in-game).
             HeroController.OnHeroInstanceSet += OnHeroInstanceSet;
 
             Logger.LogInfo($"{Name} v{ModVersion} loaded.");
+        }
+
+        private void OnShaderSettingsChanged()
+        {
+            ClientAddon.Instance?.RefreshAllPlayerSettings();
         }
 
         private void OnHeroInstanceSet(HeroController hero)

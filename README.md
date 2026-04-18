@@ -8,6 +8,8 @@ It is a client + server add-on for **[SSMP (Silksong Multiplayer)](https://thund
 ## Features
 
 - Pick from 12 tasteful presets (Crimson, Scarlet, Amber, Gold, Emerald, Teal, Azure, Royal, Violet, Magenta, Obsidian, Ivory) or supply your own hex / RGB color.
+- **Cloak-only recolor**: a custom hue-shift shader recolors only the red cloak pixels and leaves Hornet's mask, eyes, and weapon untouched.
+- Optional whole-character tint mode for users who want the original behaviour or who don't have the shader bundle.
 - Zero-friction configuration through the BepInEx configuration manager (F1 in game).
 - Fully networked — connected players automatically see each other's cloak color the moment they enter the same scene.
 - Late-joiners receive a replay of every existing player's color on connect, so nobody ever sees the wrong color.
@@ -64,13 +66,29 @@ A `thunderstore/dist/*.zip` is produced automatically alongside the compiled DLL
 
 ## How it works
 
-- The local cloak tint is applied via the `tk2dSprite` component on `HeroController.instance`
-  (with a `MeshRenderer` material fallback). Both are non-destructive vertex / material color
-  multipliers, so swapping cloaks is as cheap as changing a `Color` value per frame.
+- A small `CloakRecolor` MonoBehaviour is attached to each player's GameObject (local hero
+  and SSMP-spawned remote players). It reasserts the tint every `LateUpdate`, which keeps
+  the recolor consistent across `tk2dSpriteAnimator` material swaps.
+- **Cloak-only mode** swaps the renderer's shader for `HornetCloakColor/CloakHueShift` and
+  pushes the chosen color in HSV. The shader gates pixels by hue (red), saturation, and
+  value, then replaces only the matched hue while preserving the original brightness so
+  shading is preserved. The shader is shipped as an `AssetBundle` embedded in the DLL.
+- **Legacy mode** (or when the shader bundle isn't present) tints the whole character via
+  the `tk2dSprite` vertex color and the `MeshRenderer` material color.
 - Color updates are serialized as a 5-byte packet (player ID + RGB) and sent through the
   standard `IClientAddonNetworkSender` / `IServerAddonNetworkSender` channels exposed by SSMP.
 - The server keeps a simple in-memory table of `playerId -> CloakColor` and replays it to any
   new joiner so late arrivals see correct colors immediately.
+
+## Baking the shader bundle
+
+The cloak-only path requires `Resources/cloakshader.bundle`. It's gitignored, so contributors
+need to bake it in Unity once. See [Shaders/README.md](./Shaders/README.md) for step-by-step
+instructions (TL;DR: open Unity 6000.0.50, drop the shader and editor script in, click
+**HornetCloakColor → Build Shader Bundle**, copy the output to `Resources/`).
+
+If the bundle isn't present the build still succeeds and the mod gracefully falls back to
+the legacy whole-character tint at runtime.
 
 ## License
 

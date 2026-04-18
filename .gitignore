@@ -2,6 +2,10 @@ SilksongPath.props
 thunderstore/temp
 thunderstore/dist
 
+# Built shader bundle (rebuilt from Shaders/ source via Unity).
+Resources/*.bundle
+Resources/*.bundle.manifest
+
 ## dotnet / VS build artifacts
 .env
 *.rsuser

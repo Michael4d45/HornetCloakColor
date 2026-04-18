@@ -27,6 +27,16 @@ namespace HornetCloakColor.Shared
 
         public Color ToUnityColor() => new Color(R / 255f, G / 255f, B / 255f, 1f);
 
+        /// <summary>
+        /// Convert this RGB color to (hue, saturation, value), each in 0-1.
+        /// Matches Unity's <c>Color.RGBToHSV</c> output but works without a Unity dependency
+        /// in pure logic paths (and is identical here for shader uploads).
+        /// </summary>
+        public void ToHSV(out float h, out float s, out float v)
+        {
+            Color.RGBToHSV(ToUnityColor(), out h, out s, out v);
+        }
+
         public static CloakColor FromUnityColor(Color color)
         {
             return new CloakColor(

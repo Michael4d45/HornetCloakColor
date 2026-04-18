@@ -4,49 +4,59 @@ using UnityEngine;
 namespace HornetCloakColor.Client
 {
     /// <summary>
-    /// Applies a <see cref="CloakColor"/> tint to a player's character renderer.
+    /// Entry point that applies a <see cref="CloakColor"/> to a player GameObject.
     ///
-    /// Silksong's hero (and the SSMP remote-player prefab) renders Hornet through a single
-    /// MeshRenderer with a tk2dSprite driving the vertex colors. The cheapest way to recolor
-    /// the cloak without swapping textures is to multiply the sprite's tint.
+    /// All real work happens inside the per-player <see cref="CloakRecolor"/> MonoBehaviour
+    /// — this static helper just attaches/configures it. The MonoBehaviour reasserts the
+    /// shader and tint each frame so animation-driven material swaps don't undo our work.
     ///
-    /// We prefer the tk2dSprite color path (vertex-color multiplier) because it is non-destructive
-    /// and survives animation frame swaps. If tk2dSprite is unavailable we fall back to cloning
-    /// the MeshRenderer material and setting <c>_Color</c>.
+    /// Two render paths are supported:
+    /// <list type="bullet">
+    ///   <item>Cloak-only: the embedded <c>CloakHueShift</c> shader recolors red pixels only.</item>
+    ///   <item>Legacy: the entire tk2dSprite is tinted via vertex color.</item>
+    /// </list>
     /// </summary>
     internal static class CloakColorApplier
     {
         /// <summary>
-        /// Apply the given color to the player GameObject. Safe to call with a null target.
+        /// Apply the given color to the player GameObject using the user's current config.
+        /// Safe to call with a null target or before the plugin is fully initialized.
         /// </summary>
         public static void Apply(GameObject? playerObject, CloakColor color)
         {
             if (playerObject == null) return;
 
-            var unityColor = color.ToUnityColor();
-            var applied = false;
+            var config = HornetCloakColorPlugin.Instance?.ColorConfig;
 
-            // Primary path: tk2dSprite's vertex tint (works on local hero + remote player prefab).
-            var sprite = playerObject.GetComponent<tk2dSprite>();
-            if (sprite != null)
-            {
-                sprite.color = unityColor;
-                applied = true;
-            }
+            // Defaults match the shader so things still work if the plugin instance isn't ready yet.
+            var cloakOnly = config?.CloakOnlyMode.Value ?? true;
+            var centerHue = config?.CloakCenterHue.Value ?? 0.98f;
+            var hueWidth  = config?.CloakHueWidth.Value ?? 0.50f;
+            var minSat    = config?.CloakMinSaturation.Value ?? 0.30f;
+            var strength  = config?.CloakStrength.Value ?? 1.0f;
 
-            // Fallback / reinforcement: tint the MeshRenderer's material directly. Accessing
-            // `.material` here clones the shared material so we don't pollute other renderers.
-            var meshRenderer = playerObject.GetComponent<MeshRenderer>();
-            if (meshRenderer != null && meshRenderer.material != null)
-            {
-                meshRenderer.material.color = unityColor;
-                applied = true;
-            }
+            CloakRecolor.AttachOrUpdate(playerObject, color, cloakOnly,
+                                        centerHue, hueWidth, minSat, strength);
+        }
 
-            if (!applied)
-            {
-                Log.Warn("No tk2dSprite or MeshRenderer found on player object; cloak tint skipped.");
-            }
+        /// <summary>
+        /// Reapply the current shader/tint settings to a player without changing its color.
+        /// Used when the user toggles Cloak Only Mode or tweaks the hue range live.
+        /// </summary>
+        public static void RefreshSettings(GameObject? playerObject)
+        {
+            if (playerObject == null) return;
+            var existing = playerObject.GetComponent<CloakRecolor>();
+            if (existing == null) return;
+
+            var config = HornetCloakColorPlugin.Instance?.ColorConfig;
+            var cloakOnly = config?.CloakOnlyMode.Value ?? true;
+            var centerHue = config?.CloakCenterHue.Value ?? 0.98f;
+            var hueWidth  = config?.CloakHueWidth.Value ?? 0.50f;
+            var minSat    = config?.CloakMinSaturation.Value ?? 0.30f;
+            var strength  = config?.CloakStrength.Value ?? 1.0f;
+
+            existing.Configure(existing.Color, cloakOnly, centerHue, hueWidth, minSat, strength);
         }
     }
 }

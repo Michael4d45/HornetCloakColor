@@ -112,5 +112,24 @@ namespace HornetCloakColor.Client
                 CloakColorApplier.Apply(player.PlayerObject, data.Color);
             }
         }
+
+        /// <summary>
+        /// Re-push the current shader settings (cloak-only mode, hue range, strength) to
+        /// every known player without changing their color. Called when the user tweaks
+        /// the relevant config entries at runtime.
+        /// </summary>
+        public void RefreshAllPlayerSettings()
+        {
+            if (HeroController.SilentInstance != null)
+            {
+                CloakColorApplier.RefreshSettings(HeroController.SilentInstance.gameObject);
+            }
+
+            if (_api == null) return;
+            foreach (var player in _api.ClientManager.Players)
+            {
+                CloakColorApplier.RefreshSettings(player.PlayerObject);
+            }
+        }
     }
 }
