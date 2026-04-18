@@ -1,0 +1,34 @@
+[config]
+schemaVersion = "0.0.1"
+
+[package]
+# Replace with your Thunderstore team namespace before publishing.
+namespace = "YourTeamName"
+# max 250 characters
+description = "Change the color of Hornet's cloak. Fully synchronized with other SSMP players."
+
+websiteUrl = ""
+containsNsfwContent = false
+
+# dependencies are specified in the format AuthorName-PackageName = "version".
+[package.dependencies]
+BepInEx-BepInExPack_Silksong = "5.4.2304"
+SSMP-SSMP = "0.1.0"
+
+
+[build]
+icon = "./icon.png"
+readme = "../README.md"
+outdir = "./dist"
+
+[[build.copy]]
+source = "./temp"
+target = "/"
+
+
+[publish]
+repository = "https://thunderstore.io"
+communities = [ "hollow-knight-silksong" ]
+
+[publish.categories]
+hollow-knight-silksong = [ "mods", "skins" ]
