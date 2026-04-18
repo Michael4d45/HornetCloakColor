@@ -2,8 +2,7 @@
 schemaVersion = "0.0.1"
 
 [package]
-# Replace with your Thunderstore team namespace before publishing.
-namespace = "YourTeamName"
+namespace = "Michael4d45"
 # max 250 characters
 description = "Change the color of Hornet's cloak. Fully synchronized with other SSMP players."
 
