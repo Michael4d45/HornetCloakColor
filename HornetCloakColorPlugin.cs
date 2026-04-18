@@ -1,29 +1,26 @@
 using BepInEx;
 using HornetCloakColor.Client;
-using HornetCloakColor.Server;
 using HornetCloakColor.Shared;
 
 namespace HornetCloakColor
 {
     /// <summary>
-    /// BepInEx entry point. Registers the SSMP client + server addons and wires the
-    /// BepInEx configuration so user-driven color changes propagate over the network.
+    /// BepInEx entry point. Applies the local cloak color to Hornet and, if SSMP is
+    /// installed, registers SSMP addons so the color is synchronized to other players.
+    /// SSMP is a <b>soft</b> dependency — without it the mod still recolors your own cloak.
     /// </summary>
     [BepInAutoPlugin(id: "hornet.cloak.color", version: ModVersion)]
-    [BepInDependency("ssmp", BepInDependency.DependencyFlags.HardDependency)]
+    [BepInDependency(SSMPBridge.SSMPGuid, BepInDependency.DependencyFlags.SoftDependency)]
     public partial class HornetCloakColorPlugin : BaseUnityPlugin
     {
         /// <summary>
         /// Keep this in sync with &lt;Version&gt; in HornetCloakColor.csproj. The BepInAutoPlugin
         /// attribute requires a compile-time constant, so we can't read from the csproj directly.
         /// </summary>
-        public const string ModVersion = "1.0.0";
+        public const string ModVersion = "1.1.0";
 
         internal static HornetCloakColorPlugin? Instance { get; private set; }
         internal CloakColorConfig ColorConfig { get; private set; } = null!;
-
-        private readonly ClientAddon _clientAddon = new();
-        private readonly ServerAddon _serverAddon = new();
 
         private void Awake()
         {
@@ -31,17 +28,19 @@ namespace HornetCloakColor
 
             ColorConfig = new CloakColorConfig(Config);
 
-            SSMP.Api.Client.ClientAddon.RegisterAddon(_clientAddon);
-            SSMP.Api.Server.ServerAddon.RegisterAddon(_serverAddon);
+            // Optional SSMP integration — gracefully degrades to single-player when missing.
+            if (SSMPBridge.TryRegister())
+            {
+                Logger.LogInfo("SSMP detected — multiplayer cloak sync enabled.");
+            }
+            else
+            {
+                Logger.LogInfo("SSMP not detected — running solo (your cloak only).");
+            }
 
-            // Whenever the user changes the config, push the new color to local Hornet + network.
             ColorConfig.ColorChanged += OnConfigColorChanged;
-
-            // Cloak-only toggle / hue range tweaks: just refresh the existing CloakRecolor
-            // components — no need to renegotiate the color over the network.
             ColorConfig.ShaderSettingsChanged += OnShaderSettingsChanged;
 
-            // Also apply the initial color as soon as the hero exists in the scene (menu -> in-game).
             HeroController.OnHeroInstanceSet += OnHeroInstanceSet;
 
             Logger.LogInfo($"{Name} v{ModVersion} loaded.");
@@ -49,7 +48,11 @@ namespace HornetCloakColor
 
         private void OnShaderSettingsChanged()
         {
-            ClientAddon.Instance?.RefreshAllPlayerSettings();
+            if (HeroController.SilentInstance != null)
+            {
+                CloakColorApplier.RefreshSettings(HeroController.SilentInstance.gameObject);
+            }
+            SSMPBridge.RefreshRemotePlayerSettings();
         }
 
         private void OnHeroInstanceSet(HeroController hero)
@@ -57,8 +60,8 @@ namespace HornetCloakColor
             var color = ColorConfig.CurrentColor;
             CloakColorApplier.Apply(hero.gameObject, color);
 
-            // Make sure the server and other clients know about our color from the start.
-            ClientAddon.Instance?.SetLocalColor(color);
+            // Tell the network we exist with this color (no-op when SSMP isn't loaded).
+            SSMPBridge.NotifyLocalColorChanged(color);
         }
 
         private void OnConfigColorChanged(CloakColor color)
@@ -68,7 +71,12 @@ namespace HornetCloakColor
                 Logger.LogInfo($"Cloak color changed to {color}");
             }
 
-            ClientAddon.Instance?.SetLocalColor(color);
+            if (HeroController.SilentInstance != null)
+            {
+                CloakColorApplier.Apply(HeroController.SilentInstance.gameObject, color);
+            }
+
+            SSMPBridge.NotifyLocalColorChanged(color);
         }
     }
 }

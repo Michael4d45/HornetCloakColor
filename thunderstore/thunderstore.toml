@@ -10,9 +10,10 @@ websiteUrl = "https://github.com/Michael4d45/HornetCloakColor"
 containsNsfwContent = false
 
 # dependencies are specified in the format AuthorName-PackageName = "version".
+# SSMP is intentionally NOT listed: it's an optional integration, install it separately
+# if you want multiplayer cloak sync. The mod runs fine in single-player without it.
 [package.dependencies]
 BepInEx-BepInExPack_Silksong = "5.4.2304"
-SSMP-SSMP = "0.1.0"
 
 
 [build]

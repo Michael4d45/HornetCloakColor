@@ -56,18 +56,13 @@ namespace HornetCloakColor.Client
         }
 
         /// <summary>
-        /// Update the local player's cloak color, apply it locally, and broadcast it to the server.
-        /// Safe to call even when not connected — network send is a no-op in that case.
+        /// Remember the local player's color and broadcast it to the server.
+        /// The local hero's visual is applied by the plugin directly so this path also runs
+        /// when SSMP isn't loaded. Safe to call before connecting — the send is a no-op then.
         /// </summary>
         public void SetLocalColor(CloakColor color)
         {
             _localColor = color;
-
-            if (HeroController.SilentInstance != null)
-            {
-                CloakColorApplier.Apply(HeroController.SilentInstance.gameObject, color);
-            }
-
             SendLocalColor();
         }
 
@@ -115,16 +110,11 @@ namespace HornetCloakColor.Client
 
         /// <summary>
         /// Re-push the current shader settings (cloak-only mode, hue range, strength) to
-        /// every known player without changing their color. Called when the user tweaks
-        /// the relevant config entries at runtime.
+        /// every remote player without changing their color. The local hero is handled by
+        /// the plugin so this still fires correctly when SSMP isn't loaded.
         /// </summary>
         public void RefreshAllPlayerSettings()
         {
-            if (HeroController.SilentInstance != null)
-            {
-                CloakColorApplier.RefreshSettings(HeroController.SilentInstance.gameObject);
-            }
-
             if (_api == null) return;
             foreach (var player in _api.ClientManager.Players)
             {

@@ -1,7 +1,8 @@
 # HornetCloakColor
 
 A BepInEx mod for **Hollow Knight: Silksong** that lets you change the color of Hornet's cloak.
-It is a client + server add-on for **[SSMP (Silksong Multiplayer)](https://thunderstore.io/c/hollow-knight-silksong/p/SSMP/SSMP/)** — the color you choose is synchronized to every other player on the server, so everyone sees your custom cloak in real time.
+
+Works **single-player out of the box**. If **[SSMP (Silksong Multiplayer)](https://thunderstore.io/c/hollow-knight-silksong/p/SSMP/SSMP/)** is also installed, the chosen color is automatically synchronized to every other player on the server so everyone sees your custom cloak in real time.
 
 **Source:** [github.com/Michael4d45/HornetCloakColor](https://github.com/Michael4d45/HornetCloakColor)
 
@@ -11,22 +12,22 @@ It is a client + server add-on for **[SSMP (Silksong Multiplayer)](https://thund
 - **Cloak-only recolor**: a custom hue-shift shader recolors only the red cloak pixels and leaves Hornet's mask, eyes, and weapon untouched.
 - Optional whole-character tint mode for users who want the original behaviour or who don't have the shader bundle.
 - Zero-friction configuration through the BepInEx configuration manager (F1 in game).
-- Fully networked — connected players automatically see each other's cloak color the moment they enter the same scene.
-- Late-joiners receive a replay of every existing player's color on connect, so nobody ever sees the wrong color.
+- **Works without SSMP** — runs in single-player and recolors your own cloak. SSMP is a soft dependency: install it to also synchronize cloak colors with other players.
+- When SSMP is installed, late-joiners receive a replay of every existing player's color on connect so nobody ever sees the wrong color.
 
 ## Installation
 
 ### Via a mod manager (recommended)
 
-1. Install [SSMP](https://thunderstore.io/c/hollow-knight-silksong/p/SSMP/SSMP/) through r2modman / Thunderstore Mod Manager.
-2. Install **HornetCloakColor** alongside it.
+1. Install **HornetCloakColor** through r2modman / Thunderstore Mod Manager.
+2. (Optional) Install [SSMP](https://thunderstore.io/c/hollow-knight-silksong/p/SSMP/SSMP/) too if you want your color to sync to other players in multiplayer.
 3. Launch Silksong through the mod manager.
 
 ### Manual
 
 1. Install [BepInEx](https://thunderstore.io/c/hollow-knight-silksong/p/BepInEx/BepInExPack_Silksong/) for Silksong.
-2. Install [SSMP](https://thunderstore.io/c/hollow-knight-silksong/p/SSMP/SSMP/) into `BepInEx/plugins/SSMP/`.
-3. Copy `HornetCloakColor.dll` into `BepInEx/plugins/HornetCloakColor/`.
+2. Copy `HornetCloakColor.dll` into `BepInEx/plugins/HornetCloakColor/`.
+3. (Optional) Install [SSMP](https://thunderstore.io/c/hollow-knight-silksong/p/SSMP/SSMP/) into `BepInEx/plugins/SSMP/` for multiplayer sync.
 4. Launch the game.
 
 ## Usage
@@ -47,8 +48,9 @@ updates. You'll still see their vanilla cloaks correctly.
 
 - **Game**: Hollow Knight: Silksong
 - **BepInEx**: 5.4.21 or later
-- **SSMP**: Requires SSMP to be installed. The mod registers as both an SSMP client addon and
-  server addon so it works on dedicated SSMP servers and on peer-hosted games.
+- **SSMP**: *Optional.* If installed, the mod registers as both an SSMP client addon and a
+  server addon so it works on dedicated SSMP servers and on peer-hosted games. If absent,
+  the mod still recolors your own cloak — it just doesn't sync to other players.
 - **Silksong.GameLibs**: Built against the `*-*` floating version (whichever is published).
 
 ## Building from source
