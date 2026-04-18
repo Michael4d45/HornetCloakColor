@@ -3,6 +3,8 @@
 A BepInEx mod for **Hollow Knight: Silksong** that lets you change the color of Hornet's cloak.
 It is a client + server add-on for **[SSMP (Silksong Multiplayer)](https://thunderstore.io/c/hollow-knight-silksong/p/SSMP/SSMP/)** — the color you choose is synchronized to every other player on the server, so everyone sees your custom cloak in real time.
 
+**Source:** [github.com/Michael4d45/HornetCloakColor](https://github.com/Michael4d45/HornetCloakColor)
+
 ## Features
 
 - Pick from 12 tasteful presets (Crimson, Scarlet, Amber, Gold, Emerald, Teal, Azure, Royal, Violet, Magenta, Obsidian, Ivory) or supply your own hex / RGB color.

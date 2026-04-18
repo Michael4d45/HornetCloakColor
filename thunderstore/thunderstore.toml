@@ -6,7 +6,7 @@ namespace = "Michael4d45"
 # max 250 characters
 description = "Change the color of Hornet's cloak. Fully synchronized with other SSMP players."
 
-websiteUrl = ""
+websiteUrl = "https://github.com/Michael4d45/HornetCloakColor"
 containsNsfwContent = false
 
 # dependencies are specified in the format AuthorName-PackageName = "version".

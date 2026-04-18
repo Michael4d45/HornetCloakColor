@@ -1,7 +1,7 @@
 {
     "name": "HornetCloakColor",
     "version_number": "0.1.0",
-    "website_url": "",
+    "website_url": "https://github.com/Michael4d45/HornetCloakColor",
     "description": "Change the color of Hornet's cloak. Fully synchronized with other SSMP players.",
     "dependencies": [
         "BepInEx-BepInExPack_Silksong-5.4.2304",
