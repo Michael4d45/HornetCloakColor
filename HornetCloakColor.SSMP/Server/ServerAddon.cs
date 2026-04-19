@@ -28,7 +28,6 @@ namespace HornetCloakColor.Server
         public override void Initialize(IServerApi serverApi)
         {
             _api = serverApi;
-            Log.SetLogger(Logger);
 
             _sender = serverApi.NetServer.GetNetworkSender<PacketId>(this);
 

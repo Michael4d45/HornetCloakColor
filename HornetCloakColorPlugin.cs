@@ -1,4 +1,5 @@
 using BepInEx;
+using BepInEx.Logging;
 using HornetCloakColor.Client;
 using HornetCloakColor.Shared;
 
@@ -20,11 +21,13 @@ namespace HornetCloakColor
         public const string ModVersion = "1.6.0";
 
         internal static HornetCloakColorPlugin? Instance { get; private set; }
+        internal static ManualLogSource? LogSource { get; private set; }
         internal CloakColorConfig ColorConfig { get; private set; } = null!;
 
         private void Awake()
         {
             Instance = this;
+            LogSource = Logger;
 
             CloakPaletteConfig.Load();
 

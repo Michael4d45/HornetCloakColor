@@ -29,6 +29,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="HornetCloakColor.SSMP/**" />
+    <None Remove="HornetCloakColor.SSMP/**" />
+    <EmbeddedResource Remove="HornetCloakColor.SSMP/**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="BepInEx.Analyzers" Version="1.0.8" PrivateAssets="all" />
     <PackageReference Include="BepInEx.Core" Version="5.4.21" />
     <PackageReference Include="BepInEx.PluginInfoProps" Version="1.1.0" />
@@ -37,33 +43,11 @@
     <PackageReference Include="Microsoft.Unity.Analyzers" Version="1.25.0" PrivateAssets="all" />
     <PackageReference Include="UnityEngine.Modules" Version="6000.0.50" IncludeAssets="compile" />
     <PackageReference Include="Silksong.GameLibs" Version="*-*" PrivateAssets="all" />
-
-    <!--
-    SSMP isn't on NuGet yet. Resolution order:
-      1. Explicit $(SSMPDll) override (set in SilksongPath.props).
-      2. SSMP.dll in the local Silksong install under $(SilksongFolder)/BepInEx/plugins/SSMP.
-      3. Sibling checkout of the SSMP monorepo (../SSMP/SSMP/bin/Release/netstandard2.1/SSMP.dll),
-         useful when contributors build SSMP from source first (requires .NET SDK 9+).
-    -->
-    <Reference Include="SSMP" Condition="'$(SSMPDll)' != '' And Exists('$(SSMPDll)')">
-      <HintPath>$(SSMPDll)</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="SSMP" Condition="'$(SSMPDll)' == '' And Exists('$(SilksongFolder)/BepInEx/plugins/SSMP/SSMP.dll')">
-      <HintPath>$(SilksongFolder)/BepInEx/plugins/SSMP/SSMP.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="SSMP" Condition="'$(SSMPDll)' == '' And !Exists('$(SilksongFolder)/BepInEx/plugins/SSMP/SSMP.dll') And Exists('../SSMP/bin/Release/netstandard2.1/SSMP.dll')">
-      <HintPath>../SSMP/bin/Release/netstandard2.1/SSMP.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
   </ItemGroup>
 
-  <Target Name="CheckSSMPReference" BeforeTargets="CoreCompile">
-    <Error
-      Condition="'$(SSMPDll)' == '' And !Exists('$(SilksongFolder)/BepInEx/plugins/SSMP/SSMP.dll') And !Exists('../SSMP/bin/Release/netstandard2.1/SSMP.dll')"
-      Text="Unable to locate SSMP.dll. Set &lt;SSMPDll&gt; in SilksongPath.props, run `dotnet new silksongpath`, or build the sibling SSMP project first." />
-  </Target>
+  <ItemGroup>
+    <InternalsVisibleTo Include="HornetCloakColor.SSMP" />
+  </ItemGroup>
 
   <ItemGroup>
     <Folder Remove="thunderstore/temp;thunderstore/dist" />
@@ -92,10 +76,18 @@
              Text="Cloak shader bundle missing at Resources/cloakshader.bundle. Cloak-only mode will fall back to whole-character tint at runtime. See Shaders/README.md to bake one." />
   </Target>
 
+  <Target Name="BuildSSMPSatellite" BeforeTargets="CopyAndPackageMod">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)HornetCloakColor.SSMP\HornetCloakColor.SSMP.csproj"
+             Properties="Configuration=$(Configuration);Platform=$(Platform)"
+             Targets="Build" />
+  </Target>
+
   <Target Name="CopyAndPackageMod" AfterTargets="PostBuildEvent">
     <ItemGroup>
       <Binaries Include="$(TargetPath)" LocalDir="/" PackDir="/" />
       <Binaries Include="$(TargetDir)/$(TargetName).pdb" LocalDir="/" PackDir="/" />
+      <Binaries Include="$(TargetDir)HornetCloakColor.SSMP.dll" LocalDir="/" PackDir="/" Condition="Exists('$(TargetDir)HornetCloakColor.SSMP.dll')" />
+      <Binaries Include="$(TargetDir)HornetCloakColor.SSMP.pdb" LocalDir="/" PackDir="/" Condition="Exists('$(TargetDir)HornetCloakColor.SSMP.pdb')" />
       <Binaries Include="$(TargetDir)/cloak_palette.json" LocalDir="/" PackDir="/" Condition="Exists('$(TargetDir)/cloak_palette.json')" />
     </ItemGroup>
     <PropertyGroup>

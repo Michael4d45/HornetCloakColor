@@ -40,7 +40,6 @@ namespace HornetCloakColor.Client
         {
             Instance = this;
             _api = clientApi;
-            Log.SetLogger(Logger);
 
             _sender = clientApi.NetClient.GetNetworkSender<PacketId>(this);
 
@@ -63,6 +62,12 @@ namespace HornetCloakColor.Client
         {
             _localColor = color;
             SendLocalColor();
+        }
+
+        /// <summary>Latest color for another player's cloak (from server). Used for map mask tint.</summary>
+        internal CloakColor GetRemoteMapColorOrDefault(ushort playerId)
+        {
+            return _playerColors.TryGetValue(playerId, out var c) ? c : CloakColor.Default;
         }
 
         private void SendLocalColor()
@@ -99,6 +104,8 @@ namespace HornetCloakColor.Client
         private void OnCloakColorUpdate(CloakColorPacket data)
         {
             _playerColors[data.PlayerId] = data.Color;
+
+            PlayerMapMaskTintRegistry.SetColor(data.PlayerId, data.Color);
 
             var player = _api?.ClientManager.GetPlayer(data.PlayerId);
             if (player?.PlayerObject != null)
