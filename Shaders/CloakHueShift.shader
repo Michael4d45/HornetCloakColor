@@ -1,16 +1,10 @@
 // Shader: HornetCloakColor/CloakHueShift
 //
-// Selectively recolors pixels whose hue lies inside a configurable band around
-// _CenterHue (defaults to red, matching Hornet's cloak). Saturation gating on
-// _MinSat prevents the tint from leaking onto white/grey/black pixels (Hornet's
-// face, mask horns, weapon, etc.).
+// Recolors pixels whose RGB is close to either of two reference cloak colors (front /
+// underside). The user chooses a target tint via _TargetHue/_TargetSat/_TargetVal;
+// matched pixels get that hue/sat while preserving original value for shading.
 //
-// Recoloring is done in HSV: the matched pixel's hue is replaced with _TargetHue
-// while value (brightness) is preserved so the cloak's shading remains intact.
-//
-// Designed as a drop-in replacement for the tk2dSprite "Sprites/Default" shader
-// used by Silksong characters. It still respects the per-vertex tk2d color so
-// any game-driven tints (hit flash, fade-out, etc.) keep working.
+// Reference colors default to #79404b and #501f3b; C# uploads values from cloak_palette.json.
 Shader "HornetCloakColor/CloakHueShift"
 {
     Properties
@@ -29,7 +23,7 @@ Shader "HornetCloakColor/CloakHueShift"
         _MinSat    ("Cloak Min Saturation", Range(0,1)) = 0.30
         _MinVal    ("Cloak Min Value", Range(0,1)) = 0.05
 
-        _Strength  ("Recolor Strength", Range(0,1)) = 1.0
+        _Strength ("Recolor Strength", Range(0,1)) = 1.0
     }
 
     SubShader
@@ -91,7 +85,6 @@ Shader "HornetCloakColor/CloakHueShift"
                 return OUT;
             }
 
-            // RGB <-> HSV helpers (Sam Hocevar, public domain).
             float3 RGBtoHSV(float3 c)
             {
                 float4 K = float4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
@@ -109,35 +102,26 @@ Shader "HornetCloakColor/CloakHueShift"
                 return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
             }
 
-            // Wrap-around hue distance in [0, 0.5].
-            float HueDistance(float a, float b)
-            {
-                float d = abs(a - b);
-                return min(d, 1.0 - d);
-            }
-
             fixed4 frag(v2f IN) : SV_Target
             {
                 fixed4 tex = tex2D(_MainTex, IN.texcoord);
+                float3 t = tex.rgb;
 
-                // Work in straight RGB before vertex tint so masking is texture-driven.
-                float3 hsv = RGBtoHSV(tex.rgb);
+                float d1 = distance(t, _SrcFront.rgb);
+                float d2 = distance(t, _SrcUnder.rgb);
+                float d = min(d1, d2);
 
-                float hueDist  = HueDistance(hsv.x, _CenterHue);
-                float hueMatch = 1.0 - smoothstep(_HueWidth * 0.5, _HueWidth, hueDist);
-                float satMatch = smoothstep(_MinSat * 0.5, _MinSat, hsv.y);
-                float valMatch = smoothstep(_MinVal * 0.5, _MinVal, hsv.z);
-                float mask     = hueMatch * satMatch * valMatch * _Strength;
+                float inner = _MatchRadius * 0.35;
+                float mask = (1.0 - smoothstep(inner, _MatchRadius, d)) * _Strength;
 
-                // Replace hue, optionally scale sat/value, but preserve original value to keep shading.
+                float3 hsv = RGBtoHSV(t);
                 float3 hsvOut = float3(_TargetHue,
                                        saturate(hsv.y * _TargetSat),
                                        saturate(hsv.z * _TargetVal));
                 float3 recolored = HSVtoRGB(hsvOut);
 
-                float3 finalRgb = lerp(tex.rgb, recolored, mask);
+                float3 finalRgb = lerp(t, recolored, mask);
 
-                // Apply vertex/material tint after masking so hit-flash etc. still affects everything.
                 fixed4 outCol;
                 outCol.rgb = finalRgb * IN.color.rgb;
                 outCol.a   = tex.a * IN.color.a;

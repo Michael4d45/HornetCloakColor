@@ -68,17 +68,5 @@ namespace HornetCloakColor
         {
             HornetCloakColor.Client.ClientAddon.Instance?.SetLocalColor(color);
         }
-
-        /// <summary>Refresh shader settings on every remote player (no-op when SSMP isn't loaded).</summary>
-        public static void RefreshRemotePlayerSettings()
-        {
-            if (!_registered) return;
-            RefreshRemotePlayerSettingsCore();
-        }
-
-        private static void RefreshRemotePlayerSettingsCore()
-        {
-            HornetCloakColor.Client.ClientAddon.Instance?.RefreshAllPlayerSettings();
-        }
     }
 }

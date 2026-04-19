@@ -17,7 +17,7 @@ namespace HornetCloakColor
         /// Keep this in sync with &lt;Version&gt; in HornetCloakColor.csproj. The BepInAutoPlugin
         /// attribute requires a compile-time constant, so we can't read from the csproj directly.
         /// </summary>
-        public const string ModVersion = "1.1.0";
+        public const string ModVersion = "1.2.2";
 
         internal static HornetCloakColorPlugin? Instance { get; private set; }
         internal CloakColorConfig ColorConfig { get; private set; } = null!;
@@ -26,9 +26,10 @@ namespace HornetCloakColor
         {
             Instance = this;
 
+            CloakPaletteConfig.Load();
+
             ColorConfig = new CloakColorConfig(Config);
 
-            // Optional SSMP integration — gracefully degrades to single-player when missing.
             if (SSMPBridge.TryRegister())
             {
                 Logger.LogInfo("SSMP detected — multiplayer cloak sync enabled.");
@@ -39,20 +40,10 @@ namespace HornetCloakColor
             }
 
             ColorConfig.ColorChanged += OnConfigColorChanged;
-            ColorConfig.ShaderSettingsChanged += OnShaderSettingsChanged;
 
             HeroController.OnHeroInstanceSet += OnHeroInstanceSet;
 
             Logger.LogInfo($"{Name} v{ModVersion} loaded.");
-        }
-
-        private void OnShaderSettingsChanged()
-        {
-            if (HeroController.SilentInstance != null)
-            {
-                CloakColorApplier.RefreshSettings(HeroController.SilentInstance.gameObject);
-            }
-            SSMPBridge.RefreshRemotePlayerSettings();
         }
 
         private void OnHeroInstanceSet(HeroController hero)
@@ -60,13 +51,12 @@ namespace HornetCloakColor
             var color = ColorConfig.CurrentColor;
             CloakColorApplier.Apply(hero.gameObject, color);
 
-            // Tell the network we exist with this color (no-op when SSMP isn't loaded).
             SSMPBridge.NotifyLocalColorChanged(color);
         }
 
         private void OnConfigColorChanged(CloakColor color)
         {
-            if (ColorConfig.DebugLogging.Value)
+            if (CloakPaletteConfig.DebugLogging)
             {
                 Logger.LogInfo($"Cloak color changed to {color}");
             }

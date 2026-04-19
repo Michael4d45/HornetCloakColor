@@ -20,7 +20,7 @@
     <PathMap Condition="'$(Configuration)' == 'Release'">$(MSBuildProjectDirectory)=/</PathMap>
 
     <AssemblyTitle>HornetCloakColor</AssemblyTitle>
-    <Version>1.1.0</Version>
+    <Version>1.2.2</Version>
 
     <BepInExPluginGuid>hornet.cloak.color</BepInExPluginGuid>
     <BepInExPluginName>HornetCloakColor</BepInExPluginName>
@@ -69,6 +69,10 @@
     <Folder Remove="thunderstore/temp;thunderstore/dist" />
     <None Include="README.md" Pack="True" PackagePath="README.md" />
     <None Include="thunderstore/icon.png" Pack="True" PackagePath="icon.png" Condition="Exists('thunderstore/icon.png')" />
+    <None Include="Config\cloak_palette.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>cloak_palette.json</Link>
+    </None>
   </ItemGroup>
 
   <!--
@@ -92,6 +96,7 @@
     <ItemGroup>
       <Binaries Include="$(TargetPath)" LocalDir="/" PackDir="/" />
       <Binaries Include="$(TargetDir)/$(TargetName).pdb" LocalDir="/" PackDir="/" />
+      <Binaries Include="$(TargetDir)/cloak_palette.json" LocalDir="/" PackDir="/" Condition="Exists('$(TargetDir)/cloak_palette.json')" />
     </ItemGroup>
     <PropertyGroup>
       <ThunderstoreDir>$(ProjectDir)/thunderstore</ThunderstoreDir>

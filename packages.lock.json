@@ -384,9 +384,6 @@
           "Microsoft.NETCore.Targets": "1.1.0",
           "System.Runtime": "4.3.0"
         }
-      },
-      "Silksong.SSMP": {
-        "type": "Project"
       }
     }
   }

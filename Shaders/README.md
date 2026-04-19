@@ -1,7 +1,7 @@
 # Cloak hue-shift shader
 
 This folder contains the source for the **CloakHueShift** shader used by `HornetCloakColor`
-to recolor *only* Hornet's cloak (red-dominant pixels) instead of the entire character.
+to recolor only Hornet's cloak by matching texture pixels to two reference RGB colors.
 
 The shader runs in the built-in render pipeline, sits in for `Sprites/Default`, and is
 shipped as an `AssetBundle` so the mod can ship as a single DLL.
@@ -10,7 +10,7 @@ shipped as an `AssetBundle` so the mod can ship as a single DLL.
 
 | File | Purpose |
 | ---- | ------- |
-| `CloakHueShift.shader` | Shader source (HSV hue/sat/value gating + hue replacement). |
+| `CloakHueShift.shader` | Shader source (RGB distance mask + HSV hue replacement). |
 | `Editor/BuildCloakShaderBundle.cs` | Unity editor menu that builds the AssetBundle. |
 
 ## How to bake the AssetBundle
@@ -41,21 +41,21 @@ string inside the `.shader` file. The mod loader tries both plus a full scan so 
 ## Runtime behavior
 
 * If the bundle is embedded, the mod adds a `CloakRecolor` MonoBehaviour to each player
-  that swaps `Sprites/Default` for `CloakHueShift` and pushes the chosen color in HSV.
-* If the bundle is missing, the mod falls back to the legacy "tint everything"
-  vertex-color path, so older builds keep working.
-* The user can force the legacy mode via the **Cloak Only Mode** config toggle.
+  that swaps `Sprites/Default` for `CloakHueShift` and uploads reference colors from
+  `cloak_palette.json` plus the user's chosen tint in HSV.
+* If the bundle is missing, the mod falls back to tinting the whole sprite via vertex color.
 
-## Tuning the cloak hue range
+## Reference colors and matching
 
-Defaults match Hornet's red cloak. If you want to recolor a different region of the
-texture, tweak the shader properties at runtime (or change the defaults in the shader):
+The mod loads **`cloak_palette.json`** next to `HornetCloakColor.dll` (see `Config/cloak_palette.json`
+in the repo). Defaults:
 
-| Property | Meaning |
-| -------- | ------- |
-| `_CenterHue` | Center of the matched hue band, normalized to 0-1 (0/1 = red). |
-| `_HueWidth` | Half-width of the band on each side of the center hue. |
-| `_MinSat` | Pixels below this saturation are ignored (keeps off whites/greys). |
-| `_MinVal` | Pixels below this brightness are ignored (keeps off blacks). |
-| `_TargetHue` | Replacement hue (set by the mod from the user's chosen color). |
-| `_Strength` | Blend amount between the original and recolored pixel. |
+| Field | Role |
+| ----- | ---- |
+| `cloakFront` | Main visible cloak color to match (default `#79404b`). |
+| `cloakUnder` | Underside / fold color to match (default `#501f3b`). |
+| `matchRadius` | Max RGB distance (0–1 scale) for a pixel to count as cloak; larger = more pixels included. |
+
+At runtime, `_SrcFront`, `_SrcUnder`, and `_MatchRadius` are set from that file. The fragment
+shader takes `min(distance(texel, front), distance(texel, under))` and smoothsteps it into a
+mask, then replaces hue/saturation with the user's color while preserving value for shading.

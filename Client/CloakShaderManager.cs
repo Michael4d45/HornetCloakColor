@@ -34,15 +34,13 @@ namespace HornetCloakColor.Client
         private static AssetBundle? _bundle;
         private static Shader? _shader;
 
-        // Property IDs are cached to avoid the per-call string lookup on every renderer update.
         public static readonly int TargetHueId = Shader.PropertyToID("_TargetHue");
         public static readonly int TargetSatId = Shader.PropertyToID("_TargetSat");
         public static readonly int TargetValId = Shader.PropertyToID("_TargetVal");
-        public static readonly int StrengthId  = Shader.PropertyToID("_Strength");
-        public static readonly int CenterHueId = Shader.PropertyToID("_CenterHue");
-        public static readonly int HueWidthId  = Shader.PropertyToID("_HueWidth");
-        public static readonly int MinSatId    = Shader.PropertyToID("_MinSat");
-        public static readonly int MinValId    = Shader.PropertyToID("_MinVal");
+        public static readonly int SrcFrontId = Shader.PropertyToID("_SrcFront");
+        public static readonly int SrcUnderId = Shader.PropertyToID("_SrcUnder");
+        public static readonly int MatchRadiusId = Shader.PropertyToID("_MatchRadius");
+        public static readonly int StrengthId = Shader.PropertyToID("_Strength");
 
         /// <summary>The loaded cloak-tint shader, or null if the bundle is unavailable.</summary>
         public static Shader? Shader
@@ -70,7 +68,6 @@ namespace HornetCloakColor.Client
                 return null;
             }
 
-            // AssetBundle.LoadFromStream wants a seekable stream and is happy with a MemoryStream.
             using var ms = new MemoryStream();
             stream.CopyTo(ms);
             ms.Position = 0;
@@ -105,15 +102,12 @@ namespace HornetCloakColor.Client
 
         private static Shader? TryLoadShaderFromBundle(AssetBundle bundle)
         {
-            // 1) Asset name from file (Unity's default when baking CloakHueShift.shader).
             var s = bundle.LoadAsset<Shader>(ShaderAssetName);
             if (s != null) return s;
 
-            // 2) Rare: asset renamed to match the shader's internal path.
             s = bundle.LoadAsset<Shader>(ShaderName);
             if (s != null) return s;
 
-            // 3) Enumerate — handles odd renames; prefer runtime Shader.name match.
             var all = bundle.LoadAllAssets<Shader>();
             if (all == null || all.Length == 0) return null;
 

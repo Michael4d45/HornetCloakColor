@@ -9,8 +9,8 @@ Works **single-player out of the box**. If **[SSMP (Silksong Multiplayer)](https
 ## Features
 
 - Pick from 12 tasteful presets (Crimson, Scarlet, Amber, Gold, Emerald, Teal, Azure, Royal, Violet, Magenta, Obsidian, Ivory) or supply your own hex / RGB color.
-- **Cloak-only recolor**: a custom hue-shift shader recolors only the red cloak pixels and leaves Hornet's mask, eyes, and weapon untouched.
-- Optional whole-character tint mode for users who want the original behaviour or who don't have the shader bundle.
+- **Cloak-only recolor**: a custom shader matches pixels to two reference cloak colors (front `#79404b`, underside `#501f3b` by default) and recolors only those pixels. Edit `cloak_palette.json` next to the DLL if you need to tune matching for a texture update.
+- If the shader bundle isn't embedded, the mod falls back to tinting the whole character.
 - Zero-friction configuration through the BepInEx configuration manager (F1 in game).
 - **Works without SSMP** — runs in single-player and recolors your own cloak. SSMP is a soft dependency: install it to also synchronize cloak colors with other players.
 - When SSMP is installed, late-joiners receive a replay of every existing player's color on connect so nobody ever sees the wrong color.
@@ -26,7 +26,7 @@ Works **single-player out of the box**. If **[SSMP (Silksong Multiplayer)](https
 ### Manual
 
 1. Install [BepInEx](https://thunderstore.io/c/hollow-knight-silksong/p/BepInEx/BepInExPack_Silksong/) for Silksong.
-2. Copy `HornetCloakColor.dll` into `BepInEx/plugins/HornetCloakColor/`.
+2. Copy `HornetCloakColor.dll` and `cloak_palette.json` into `BepInEx/plugins/HornetCloakColor/` (Thunderstore builds include both).
 3. (Optional) Install [SSMP](https://thunderstore.io/c/hollow-knight-silksong/p/SSMP/SSMP/) into `BepInEx/plugins/SSMP/` for multiplayer sync.
 4. Launch the game.
 
@@ -35,14 +35,37 @@ Works **single-player out of the box**. If **[SSMP (Silksong Multiplayer)](https
 1. Launch Silksong and reach the main menu (this ensures BepInEx finishes loading the config).
 2. Open the BepInEx configuration manager (default keybind: **F1**).
 3. Under **HornetCloakColor → Appearance**:
-   - Set **Cloak Color Preset** to any of the listed presets, **or**
-   - Set it to `Custom` and provide a color in the **Custom Cloak Color** field.
+   - Set **Cloak Color Preset** to **White** for the stock cloak look (no tint): you should see the game's normal reddish cloak, not a pale sheet. **White** means the tint multiply is `#FFFFFF`, not that the cloak is dyed white.
+   - Pick another preset for a tinted cloak, **or** set it to `Custom` and provide a color in the **Custom Cloak Color** field.
      Accepted formats: `#AA3344`, `AA3344`, or `170,51,68` (decimal 0–255).
+   - The `#79404b` / `#501f3b` entries in `cloak_palette.json` only define cloak masking for the shader — they are not this preset.
 4. Load a save or join a multiplayer server — your cloak will be tinted immediately, and every
    other SSMP player with this mod installed will see the same color on your Hornet.
 
 Players **without** this mod will still see vanilla Hornet — they simply won't receive the color
 updates. You'll still see their vanilla cloaks correctly.
+
+### `cloak_palette.json`
+
+Shipped next to `HornetCloakColor.dll`. It tells the cloak shader which **source** colors in the
+sprite count as the cloak (so only those pixels are recolored to your preset). You normally do
+not need to edit it.
+
+```json
+{
+  "cloakFront": "#79404b",
+  "cloakUnder": "#501f3b",
+  "matchRadius": 0.18,
+  "debugLogging": false
+}
+```
+
+- `cloakFront` / `cloakUnder`: reference hex colors from the vanilla texture (front and underside).
+- `matchRadius`: how far a pixel may deviate in RGB space and still match (roughly 0.05–0.35).
+  Raise slightly if some cloak pixels are missed after a game update.
+- `debugLogging`: when `true`, logs extra lines (e.g. each cloak color change). Default `false`.
+
+If the file is missing or invalid, the same defaults are used from code.
 
 ## Compatibility
 
@@ -71,12 +94,12 @@ A `thunderstore/dist/*.zip` is produced automatically alongside the compiled DLL
 - A small `CloakRecolor` MonoBehaviour is attached to each player's GameObject (local hero
   and SSMP-spawned remote players). It reasserts the tint every `LateUpdate`, which keeps
   the recolor consistent across `tk2dSpriteAnimator` material swaps.
-- **Cloak-only mode** swaps the renderer's shader for `HornetCloakColor/CloakHueShift` and
-  pushes the chosen color in HSV. The shader gates pixels by hue (red), saturation, and
-  value, then replaces only the matched hue while preserving the original brightness so
-  shading is preserved. The shader is shipped as an `AssetBundle` embedded in the DLL.
-- **Legacy mode** (or when the shader bundle isn't present) tints the whole character via
-  the `tk2dSprite` vertex color and the `MeshRenderer` material color.
+- **Cloak shader path** swaps the renderer's shader for `HornetCloakColor/CloakHueShift` and
+  pushes the chosen color in HSV. The shader measures RGB distance from each texel to two
+  reference colors (from `cloak_palette.json`), masks the cloak, then replaces hue/saturation
+  while preserving value for shading. The shader is shipped as an `AssetBundle` embedded in the DLL.
+- **Fallback** (when the shader bundle isn't present) tints the whole character via the
+  `tk2dSprite` vertex color and the `MeshRenderer` material color.
 - Color updates are serialized as a 5-byte packet (player ID + RGB) and sent through the
   standard `IClientAddonNetworkSender` / `IServerAddonNetworkSender` channels exposed by SSMP.
 - The server keeps a simple in-memory table of `playerId -> CloakColor` and replays it to any

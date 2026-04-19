@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using HornetCloakColor.Shared;
 using SSMP.Api.Client;
 using SSMP.Api.Client.Networking;
-using UnityEngine;
 
 namespace HornetCloakColor.Client
 {
@@ -105,20 +104,6 @@ namespace HornetCloakColor.Client
             if (player?.PlayerObject != null)
             {
                 CloakColorApplier.Apply(player.PlayerObject, data.Color);
-            }
-        }
-
-        /// <summary>
-        /// Re-push the current shader settings (cloak-only mode, hue range, strength) to
-        /// every remote player without changing their color. The local hero is handled by
-        /// the plugin so this still fires correctly when SSMP isn't loaded.
-        /// </summary>
-        public void RefreshAllPlayerSettings()
-        {
-            if (_api == null) return;
-            foreach (var player in _api.ClientManager.Players)
-            {
-                CloakColorApplier.RefreshSettings(player.PlayerObject);
             }
         }
     }
