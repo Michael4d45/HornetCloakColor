@@ -9,7 +9,8 @@ Works **single-player out of the box**. If **[SSMP (Silksong Multiplayer)](https
 ## Features
 
 - Pick from 12 tasteful presets (Crimson, Scarlet, Amber, Gold, Emerald, Teal, Azure, Royal, Violet, Magenta, Obsidian, Ivory) or supply your own hex / RGB color.
-- **Cloak-only recolor**: a custom shader matches pixels to two reference cloak colors (front `#79404b`, underside `#501f3b` by default) and recolors only those pixels. Edit `cloak_palette.json` next to the DLL if you need to tune matching for a texture update.
+- **Cloak-only recolor**: a custom shader matches pixels to reference cloak colors (defaults ship **16** cloak refs + **10** avoid refs in `cloak_palette.json`) and recolors only cloak-like pixels. Edit `cloak_palette.json` next to the DLL to tune masking when an animation/atlas still looks wrong.
+- **Scene-wide coverage**: a separate scanner finds any sprite drawing a Hornet atlas (matched by texture name) anywhere in the scene, even renderers spawned outside the player hierarchy (e.g. steam-vent recoil pose, item-get pose), so animations don't pop back to red.
 - If the shader bundle isn't embedded, the mod falls back to tinting the whole character.
 - Zero-friction configuration through the BepInEx configuration manager (F1 in game).
 - **Works without SSMP** — runs in single-player and recolors your own cloak. SSMP is a soft dependency: install it to also synchronize cloak colors with other players.
@@ -38,7 +39,7 @@ Works **single-player out of the box**. If **[SSMP (Silksong Multiplayer)](https
    - Set **Cloak Color Preset** to **White** for the stock cloak look (no tint): you should see the game's normal reddish cloak, not a pale sheet. **White** means the tint multiply is `#FFFFFF`, not that the cloak is dyed white.
    - Pick another preset for a tinted cloak, **or** set it to `Custom` and provide a color in the **Custom Cloak Color** field.
      Accepted formats: `#AA3344`, `AA3344`, or `170,51,68` (decimal 0–255).
-   - The `#79404b` / `#501f3b` entries in `cloak_palette.json` only define cloak masking for the shader — they are not this preset.
+   - The `cloakColors` / `avoidColors` entries in `cloak_palette.json` only define which texels the shader treats as cloak vs protected — they are not the same as this tint preset.
 4. Load a save or join a multiplayer server — your cloak will be tinted immediately, and every
    other SSMP player with this mod installed will see the same color on your Hornet.
 
@@ -53,19 +54,55 @@ not need to edit it.
 
 ```json
 {
-  "cloakFront": "#79404b",
-  "cloakUnder": "#501f3b",
-  "matchRadius": 0.18,
-  "debugLogging": false
+  "cloakColors": ["#79404b", "..."],
+  "avoidColors": ["#ffffff", "..."],
+  "matchRadius": 0.135,
+  "avoidMatchRadius": 0.12,
+  "debugLogging": false,
+  "sceneScanTextureContains": ["hornet"],
+  "sceneScanPathContains": ["hornet"],
+  "sceneScanIntervalFrames": 3
 }
 ```
 
-- `cloakFront` / `cloakUnder`: reference hex colors from the vanilla texture (front and underside).
-- `matchRadius`: how far a pixel may deviate in RGB space and still match (roughly 0.05–0.35).
-  Raise slightly if some cloak pixels are missed after a game update.
-- `debugLogging`: when `true`, logs extra lines (e.g. each cloak color change). Default `false`.
+(Full default lists are in [`Config/cloak_palette.json`](./Config/cloak_palette.json) in the repo.)
 
-If the file is missing or invalid, the same defaults are used from code.
+- `cloakColors`: reference hex colors from the vanilla atlases. Up to **16** entries.
+  Texels close to **any** of them count as cloak. Add more hexes if a specific animation
+  (recoil from a steam vent, dive, dash, etc.) still shows the original red — sample the
+  cloak pixels from the matching atlas in an image editor and append them here.
+- `avoidColors`: optional; up to **16** hex colors. Texels close to **any** of these in RGB get
+  their recolor **mask reduced** (same smoothstep idea as matching, using `avoidMatchRadius`),
+  so skin, metal trim, etc. can stay vanilla even if they sit near a cloak reference. Leave
+  empty `[]` if you do not need masking.
+- `matchRadius`: how far a pixel may deviate in RGB space and still count as cloak (roughly 0.05–0.35).
+  Raise slightly if some cloak pixels are missed after a game update.
+- `avoidMatchRadius`: same scale as `matchRadius`, used only for the avoid list. If omitted, it
+  defaults to whatever `matchRadius` is after loading the file.
+- `debugLogging`: when `true`, logs extra lines (e.g. each cloak color change, how many
+  reference colors loaded, and which scene textures the scanner is matching/ignoring).
+  Default `false`.
+- `sceneScanTextureContains`: substrings (case-insensitive) matched against the texture's
+  `.name`. Rarely useful on its own (Hornet's atlases are named `atlas0`/`atlas1`/…), but
+  any name match is also promoted into the texture-instance registry so future scans of
+  the same atlas hit the fast path.
+- `sceneScanPathContains`: substrings (case-insensitive) matched against the full
+  GameObject transform path. Rescues scene-specific poses (resting in bed, sitting at
+  things) whose atlas the active hero never renders directly. If a pose still shows red,
+  enable `debugLogging`, trigger the pose, and look for
+  `[Scanner] Ignored texture (no match): atlas0 … on '<path>'` lines — add a substring of
+  that path here.
+- `dumpDiscoveredTextures`: when `true`, the first time each Hornet atlas is recognized
+  the mod writes a PNG of it to `BepInEx/plugins/HornetCloakColor/TextureDumps/`. Files are
+  named `<texName>_id<InstanceID>_<width>x<height>_<source>.png` so you can correlate
+  runtime instance IDs (from the `[Registry]` / `[Scanner]` log lines) with actual sprite
+  sheets, and sample colors to add to `cloakColors`. Default `false` — turn on
+  temporarily, capture the textures you care about, then turn off again.
+- `sceneScanIntervalFrames`: how often (in frames) the scanner walks every `tk2dSprite`
+  in the scene. `1` = every frame; `3` is a good default. Higher = cheaper but slightly
+  slower to color newly-spawned poses.
+
+If the file is missing or invalid, the built-in defaults are used.
 
 ## Compatibility
 
@@ -91,13 +128,45 @@ A `thunderstore/dist/*.zip` is produced automatically alongside the compiled DLL
 
 ## How it works
 
-- A small `CloakRecolor` MonoBehaviour is attached to each player's GameObject (local hero
-  and SSMP-spawned remote players). It reasserts the tint every `LateUpdate`, which keeps
-  the recolor consistent across `tk2dSpriteAnimator` material swaps.
+- A small `CloakRecolor` MonoBehaviour is attached to each player's root GameObject (local hero
+  and SSMP-spawned remote players). Every `LateUpdate` it walks **all** `MeshRenderer`s under
+  that object (`GetComponentsInChildren`, including **inactive** children). Some animations use
+  extra meshes or toggled child objects; only updating the root renderer missed those frames.
+- A scene-wide `CloakSceneScanner` runs on its own GameObject (DontDestroyOnLoad) at a high
+  script-execution order. Every few frames it iterates every `tk2dSprite` in the scene and
+  applies the local cloak color to any whose main texture matches Hornet. This catches
+  Hornet renderers spawned **outside** the player hierarchy (steam-vent recoil pose,
+  item-get pose, etc.) where `GetComponentsInChildren` can't reach. Renderers that already
+  have a `CloakRecolor` ancestor are skipped so per-player remote colors keep winning in
+  multiplayer.
+- "Matches Hornet" is decided in three stages:
+  1. **Texture instance registry** — every atlas the per-player `CloakRecolor` walks (which
+     is, by definition, a Hornet atlas) is recorded by its `Texture.GetInstanceID()`. The
+     scanner accepts any orphan sprite whose texture has the same instance ID. This is
+     reliable even though Silksong ships Hornet's atlases under the generic names
+     `atlas0`–`atlas3` (also used by many unrelated atlases — name-only filtering would
+     either miss them or recolor everything).
+  2. **Texture name filter** (`sceneScanTextureContains`) — substring match against
+     `Texture.name`. Useful when something Hornet-named exists outside any tk2dSprite
+     the hero has rendered yet.
+  3. **GameObject path filter** (`sceneScanPathContains`) — substring match against the
+     full transform path. Catches scene-specific poses (e.g. **resting in bed, sitting at
+     things**) whose atlas the active hero never renders directly, so the registry never
+     learns about it. The pose's GameObject typically still has "Hornet" somewhere in its
+     path, so the path filter rescues these.
+
+  When stage 2 or 3 matches, the texture is promoted into the registry so subsequent scans
+  hit the fast path.
+- **Sprite sheets / atlases:** Hornet’s art can live in multiple atlases (e.g. idle vs sprint).
+  If a move still looks wrong, sample the cloak pixels from that atlas in an image editor and
+  add or adjust hex values in `cloak_palette.json` / raise `matchRadius` slightly — the mod
+  matches by RGB distance to your reference colors, so different bakes may need tuning.
 - **Cloak shader path** swaps the renderer's shader for `HornetCloakColor/CloakHueShift` and
-  pushes the chosen color in HSV. The shader measures RGB distance from each texel to two
-  reference colors (from `cloak_palette.json`), masks the cloak, then replaces hue/saturation
-  while preserving value for shading. The shader is shipped as an `AssetBundle` embedded in the DLL.
+  pushes the chosen color in HSV. The shader measures RGB distance from each texel to up to
+  **16** cloak reference colors (from `cloak_palette.json`), takes the minimum, and smoothsteps it
+  into a mask. Optionally, distance to up to **16** avoid colors reduces that mask so non-cloak
+  pixels are not recolored. It then replaces hue/saturation while preserving value for shading.
+  The shader is shipped as an `AssetBundle` embedded in the DLL.
 - **Fallback** (when the shader bundle isn't present) tints the whole character via the
   `tk2dSprite` vertex color and the `MeshRenderer` material color.
 - Color updates are serialized as a 5-byte packet (player ID + RGB) and sent through the

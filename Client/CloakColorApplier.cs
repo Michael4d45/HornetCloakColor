@@ -17,5 +17,14 @@ namespace HornetCloakColor.Client
             var useCloakShader = CloakShaderManager.Shader != null;
             CloakRecolor.AttachOrUpdate(playerObject, color, useCloakShader);
         }
+
+        /// <summary>
+        /// Push the local player's color to the scene scanner so any orphan Hornet renderer
+        /// (steam-vent recoil, item-get pose, etc.) gets the same tint.
+        /// </summary>
+        public static void SetLocalSceneColor(CloakColor color)
+        {
+            CloakSceneScanner.SetColor(color);
+        }
     }
 }

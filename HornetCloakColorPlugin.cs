@@ -17,7 +17,7 @@ namespace HornetCloakColor
         /// Keep this in sync with &lt;Version&gt; in HornetCloakColor.csproj. The BepInAutoPlugin
         /// attribute requires a compile-time constant, so we can't read from the csproj directly.
         /// </summary>
-        public const string ModVersion = "1.2.2";
+        public const string ModVersion = "1.6.0";
 
         internal static HornetCloakColorPlugin? Instance { get; private set; }
         internal CloakColorConfig ColorConfig { get; private set; } = null!;
@@ -28,7 +28,13 @@ namespace HornetCloakColor
 
             CloakPaletteConfig.Load();
 
+            // Stand up the scene-wide scanner before the hero loads so orphan Hornet
+            // renderers (steam-vent recoil, item-get pose, etc.) get tinted as soon as
+            // they appear, even if the hero's hierarchy never owns them.
+            CloakSceneScanner.EnsureCreated();
+
             ColorConfig = new CloakColorConfig(Config);
+            CloakColorApplier.SetLocalSceneColor(ColorConfig.CurrentColor);
 
             if (SSMPBridge.TryRegister())
             {
@@ -50,6 +56,7 @@ namespace HornetCloakColor
         {
             var color = ColorConfig.CurrentColor;
             CloakColorApplier.Apply(hero.gameObject, color);
+            CloakColorApplier.SetLocalSceneColor(color);
 
             SSMPBridge.NotifyLocalColorChanged(color);
         }
@@ -65,6 +72,7 @@ namespace HornetCloakColor
             {
                 CloakColorApplier.Apply(HeroController.SilentInstance.gameObject, color);
             }
+            CloakColorApplier.SetLocalSceneColor(color);
 
             SSMPBridge.NotifyLocalColorChanged(color);
         }

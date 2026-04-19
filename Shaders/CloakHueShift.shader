@@ -1,10 +1,11 @@
 // Shader: HornetCloakColor/CloakHueShift
 //
-// Recolors pixels whose RGB is close to either of two reference cloak colors (front /
-// underside). The user chooses a target tint via _TargetHue/_TargetSat/_TargetVal;
-// matched pixels get that hue/sat while preserving original value for shading.
-//
-// Reference colors default to #79404b and #501f3b; C# uploads values from cloak_palette.json.
+// Recolors texels whose RGB is close to ANY of up to 16 reference cloak colors.
+// Optionally, texels close to ANY of up to 16 "avoid" colors get their mask reduced
+// (skin, metal, etc.) so they are not recolored even if they sit near cloak colors in RGB.
+// Reference lists come from cloak_palette.json.
+// User chooses a target tint via _TargetHue/_TargetSat/_TargetVal; matched
+// texels get that hue/sat with original value preserved for shading.
 Shader "HornetCloakColor/CloakHueShift"
 {
     Properties
@@ -12,17 +13,12 @@ Shader "HornetCloakColor/CloakHueShift"
         [PerRendererData] _MainTex ("Sprite Texture", 2D) = "white" {}
         _Color ("Material Tint", Color) = (1,1,1,1)
 
-        // Recolor target (set per-renderer from C#).
         _TargetHue ("Target Hue (0-1)", Range(0,1)) = 0.0
         _TargetSat ("Target Saturation Multiplier", Range(0,2)) = 1.0
         _TargetVal ("Target Value Multiplier", Range(0,2)) = 1.0
 
-        // What counts as "the cloak" in the source texture (defaults: deep red).
-        _CenterHue ("Cloak Center Hue (0-1)", Range(0,1)) = 0.98
-        _HueWidth  ("Cloak Hue Width", Range(0,0.5)) = 0.50
-        _MinSat    ("Cloak Min Saturation", Range(0,1)) = 0.30
-        _MinVal    ("Cloak Min Value", Range(0,1)) = 0.05
-
+        _MatchRadius ("RGB Match Radius", Range(0.02,0.6)) = 0.18
+        _AvoidMatchRadius ("Avoid RGB Radius", Range(0.02,0.6)) = 0.18
         _Strength ("Recolor Strength", Range(0,1)) = 1.0
     }
 
@@ -49,6 +45,9 @@ Shader "HornetCloakColor/CloakHueShift"
             #pragma fragment frag
             #include "UnityCG.cginc"
 
+            #define MAX_CLOAK_COLORS 16
+            #define MAX_AVOID_COLORS 16
+
             struct appdata_t
             {
                 float4 vertex   : POSITION;
@@ -70,11 +69,14 @@ Shader "HornetCloakColor/CloakHueShift"
             float _TargetHue;
             float _TargetSat;
             float _TargetVal;
-            float _CenterHue;
-            float _HueWidth;
-            float _MinSat;
-            float _MinVal;
+            float _MatchRadius;
+            float _AvoidMatchRadius;
             float _Strength;
+
+            // Filled from C# every frame. Unused slots are pushed far away (rgb = 10) so
+            // distance() stays huge and they never contribute to the mask.
+            float4 _SrcColors[MAX_CLOAK_COLORS];
+            float4 _AvoidColors[MAX_AVOID_COLORS];
 
             v2f vert(appdata_t IN)
             {
@@ -107,12 +109,31 @@ Shader "HornetCloakColor/CloakHueShift"
                 fixed4 tex = tex2D(_MainTex, IN.texcoord);
                 float3 t = tex.rgb;
 
-                float d1 = distance(t, _SrcFront.rgb);
-                float d2 = distance(t, _SrcUnder.rgb);
-                float d = min(d1, d2);
+                float minD = 999.0;
+                [unroll]
+                for (int i = 0; i < MAX_CLOAK_COLORS; i++)
+                {
+                    float di = distance(t, _SrcColors[i].rgb);
+                    minD = min(minD, di);
+                }
 
                 float inner = _MatchRadius * 0.35;
-                float mask = (1.0 - smoothstep(inner, _MatchRadius, d)) * _Strength;
+                float mask = (1.0 - smoothstep(inner, _MatchRadius, minD)) * _Strength;
+
+                // Suppress recolor where texel is close to any avoid color (skin, trim, etc.)
+                if (_AvoidMatchRadius > 1e-5)
+                {
+                    float minAvoid = 999.0;
+                    [unroll]
+                    for (int j = 0; j < MAX_AVOID_COLORS; j++)
+                    {
+                        float dj = distance(t, _AvoidColors[j].rgb);
+                        minAvoid = min(minAvoid, dj);
+                    }
+                    float aInner = _AvoidMatchRadius * 0.35;
+                    float avoidFactor = smoothstep(aInner, _AvoidMatchRadius, minAvoid);
+                    mask *= avoidFactor;
+                }
 
                 float3 hsv = RGBtoHSV(t);
                 float3 hsvOut = float3(_TargetHue,

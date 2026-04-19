@@ -1,129 +1,78 @@
+using System.Collections.Generic;
 using HornetCloakColor.Shared;
 using UnityEngine;
 
 namespace HornetCloakColor.Client
 {
     /// <summary>
-    /// Per-player MonoBehaviour that keeps the cloak tint applied across animation /
-    /// material swaps. Uses the <c>CloakHueShift</c> shader when the bundle is present
-    /// (matches texture pixels to fixed front/under reference colors from
-    /// <c>cloak_palette.json</c>); otherwise tints the whole sprite.
+    /// Per-player behaviour that keeps cloak tint applied across animation / material swaps.
+    /// Walks <b>all</b> <see cref="MeshRenderer"/>s under the player (including children and
+    /// inactive objects). Some Hornet animations use separate renderers or layers; only
+    /// touching the root missed those frames.
+    ///
+    /// This component owns the renderers in its own hierarchy. <see cref="CloakSceneScanner"/>
+    /// then handles "orphan" Hornet renderers that the engine spawns elsewhere in the scene
+    /// (steam-vent recoil pose, item-get pose, etc.).
     /// </summary>
+    [DefaultExecutionOrder(10000)]
     [DisallowMultipleComponent]
     internal class CloakRecolor : MonoBehaviour
     {
         public CloakColor Color { get; private set; } = CloakColor.Default;
         public bool UseCloakShader { get; private set; } = true;
 
-        private MeshRenderer? _renderer;
-        private tk2dSprite? _sprite;
-        private Shader? _originalShader;
-        private bool _shaderApplied;
+        /// <summary>Original sprite shader per renderer before we swapped in the cloak shader.</summary>
+        private readonly Dictionary<MeshRenderer, Shader> _originalShaderByRenderer = new();
 
-        private void Awake()
+        private void LateUpdate()
         {
-            _renderer = GetComponent<MeshRenderer>();
-            _sprite   = GetComponent<tk2dSprite>();
+            CloakMaterialApplier.PruneDestroyed(_originalShaderByRenderer);
+            ApplyToAllMeshRenderers();
         }
 
         public void Configure(CloakColor color, bool useCloakShader)
         {
             Color          = color;
             UseCloakShader = useCloakShader;
-            ApplyImmediate();
+            ApplyToAllMeshRenderers();
         }
 
         public void SetColor(CloakColor color)
         {
             Color = color;
-            ApplyImmediate();
+            ApplyToAllMeshRenderers();
         }
 
-        private void LateUpdate() => ApplyImmediate();
-
-        private void ApplyImmediate()
+        private void ApplyToAllMeshRenderers()
         {
-            if (_renderer == null) return;
+            // true = include inactive (some states toggle child meshes).
+            var renderers = GetComponentsInChildren<MeshRenderer>(true);
+            if (renderers == null || renderers.Length == 0) return;
 
-            var mat = _renderer.material;
-            if (mat == null) return;
-
-            if (UseCloakShader && CloakShaderManager.Shader != null)
+            foreach (var meshRenderer in renderers)
             {
-                EnsureCloakShader(mat);
-                ApplyShaderProperties(mat);
+                if (meshRenderer == null) continue;
+
+                // Anything we touch here is by definition a Hornet renderer, so its
+                // current atlas is a Hornet atlas. Register it so the scene scanner can
+                // recognize the same atlas instance on orphan renderers (e.g. steam-vent
+                // recoil pose, item-get pose) where matching by texture name is hopeless
+                // (the game uses the generic name "atlas0" for many unrelated atlases).
+                var shared = meshRenderer.sharedMaterial;
+                if (shared != null)
+                {
+                    var heroTex = shared.mainTexture;
+                    if (HornetTextureRegistry.Register(heroTex))
+                        TextureDumper.TryDump(heroTex, "hero");
+                }
+
+                CloakMaterialApplier.Apply(
+                    meshRenderer,
+                    sprite: null,
+                    Color,
+                    UseCloakShader,
+                    _originalShaderByRenderer);
             }
-            else
-            {
-                RestoreOriginalShader(mat);
-                ApplyVertexTint(mat);
-            }
-        }
-
-        private void EnsureCloakShader(Material mat)
-        {
-            var cloakShader = CloakShaderManager.Shader!;
-            if (mat.shader == cloakShader)
-            {
-                _shaderApplied = true;
-                return;
-            }
-
-            if (!_shaderApplied)
-            {
-                _originalShader = mat.shader;
-            }
-
-            var tex = mat.mainTexture;
-            mat.shader = cloakShader;
-            if (tex != null) mat.mainTexture = tex;
-            _shaderApplied = true;
-        }
-
-        private void RestoreOriginalShader(Material mat)
-        {
-            if (!_shaderApplied) return;
-            if (_originalShader == null) return;
-            if (mat.shader == _originalShader) return;
-
-            var tex = mat.mainTexture;
-            mat.shader = _originalShader;
-            if (tex != null) mat.mainTexture = tex;
-            _shaderApplied = false;
-        }
-
-        private void ApplyShaderProperties(Material mat)
-        {
-            if (_sprite != null && _sprite.color != UnityEngine.Color.white)
-            {
-                _sprite.color = UnityEngine.Color.white;
-            }
-
-            mat.SetColor(CloakShaderManager.SrcFrontId, CloakPaletteConfig.FrontUnity);
-            mat.SetColor(CloakShaderManager.SrcUnderId, CloakPaletteConfig.UnderUnity);
-            mat.SetFloat(CloakShaderManager.MatchRadiusId, CloakPaletteConfig.MatchRadius);
-
-            // Preset "White" / #FFFFFF = no tint. Feeding white through RGB→HSV gives S=0 and the
-            // fragment shader would output grey/off-white cloak pixels — so disable recolor entirely.
-            if (Color.Equals(CloakColor.Default))
-            {
-                mat.SetFloat(CloakShaderManager.StrengthId, 0f);
-                return;
-            }
-
-            Color.ToHSV(out var h, out var s, out var v);
-
-            mat.SetFloat(CloakShaderManager.TargetHueId, h);
-            mat.SetFloat(CloakShaderManager.TargetSatId, s <= 0.001f ? 0f : 1.0f);
-            mat.SetFloat(CloakShaderManager.TargetValId, Mathf.Lerp(0.6f, 1.4f, v));
-            mat.SetFloat(CloakShaderManager.StrengthId, 1f);
-        }
-
-        private void ApplyVertexTint(Material mat)
-        {
-            var unityColor = Color.ToUnityColor();
-            if (_sprite != null) _sprite.color = unityColor;
-            mat.color = unityColor;
         }
 
         public static CloakRecolor? AttachOrUpdate(GameObject? playerObject, CloakColor color, bool useCloakShader)

@@ -1,6 +1,48 @@
 {
-  "cloakFront": "#79404b",
-  "cloakUnder": "#501f3b",
-  "matchRadius": 0.18,
-  "debugLogging": false
+  "_comment": "Cloak: up to 16 reference colors. Texels close to ANY get recolored. Avoid: up to 16 colors (skin, metal, etc.) — texels close to ANY get the recolor mask reduced so they stay vanilla.",
+  "cloakColors": [
+    "#79404b",
+    "#d4b8b8",
+    "#7a414c",
+    "#b2808c",
+    "#351c20",
+    "#501f3b",
+    "#562d35",
+    "#3b162b",
+    "#ec7f92",
+    "#955a70",
+    "#efbdd1",
+    "#ae5c6c",
+    "#994d5c",
+    "#a7807b",
+    "#be485e",
+    "#592439"
+  ],
+  "avoidColors": [
+    "#ffffff",
+    "#000000",
+    "#c7cbb5",
+    "#16162c",
+    "#808080",
+    "#5b4133",
+    "#231914",
+    "#644662",
+    "#282c34",
+    "#8a6187",
+    "#302319"
+  ],
+
+  "matchRadius": 0.175,
+  "_comment_avoidRadius": "Optional; if omitted, defaults to matchRadius. Same 0.02–1.0 range as matchRadius.",
+  "avoidMatchRadius": 0.020,
+
+  "debugLogging": false,
+
+  "_comment2": "Scene-wide scanner. A sprite is considered Hornet if (a) its texture instance was already seen on a hero renderer (registry), or (b) its texture name contains one of sceneScanTextureContains, or (c) its full GameObject path contains one of sceneScanPathContains. Path matching catches scene-specific poses (resting in bed, sitting at things) whose atlas the active hero never renders directly. Set debugLogging=true to see which sprites get matched/ignored and on which path.",
+  "sceneScanTextureContains": ["hornet"],
+  "sceneScanPathContains": ["hornet"],
+  "sceneScanIntervalFrames": 3,
+
+  "_comment3": "Diagnostic: when true, the first time we see each Hornet atlas we dump it as a PNG to BepInEx/plugins/HornetCloakColor/TextureDumps/ so you can correlate runtime InstanceIDs with actual sprite sheets. Off by default; turn on when you need to identify a texture, then turn off again.",
+  "dumpDiscoveredTextures": false
 }

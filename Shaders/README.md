@@ -1,7 +1,8 @@
 # Cloak hue-shift shader
 
 This folder contains the source for the **CloakHueShift** shader used by `HornetCloakColor`
-to recolor only Hornet's cloak by matching texture pixels to two reference RGB colors.
+to recolor only Hornet's cloak by matching texture pixels to reference RGB colors, with an
+optional second list that **suppresses** recoloring where pixels match (skin, metal, etc.).
 
 The shader runs in the built-in render pipeline, sits in for `Sprites/Default`, and is
 shipped as an `AssetBundle` so the mod can ship as a single DLL.
@@ -10,7 +11,7 @@ shipped as an `AssetBundle` so the mod can ship as a single DLL.
 
 | File | Purpose |
 | ---- | ------- |
-| `CloakHueShift.shader` | Shader source (RGB distance mask + HSV hue replacement). |
+| `CloakHueShift.shader` | Shader source (RGB cloak mask + optional avoid mask + HSV hue replacement). |
 | `Editor/BuildCloakShaderBundle.cs` | Unity editor menu that builds the AssetBundle. |
 
 ## How to bake the AssetBundle
@@ -48,14 +49,22 @@ string inside the `.shader` file. The mod loader tries both plus a full scan so 
 ## Reference colors and matching
 
 The mod loads **`cloak_palette.json`** next to `HornetCloakColor.dll` (see `Config/cloak_palette.json`
-in the repo). Defaults:
+in the repo). Schema:
 
 | Field | Role |
 | ----- | ---- |
-| `cloakFront` | Main visible cloak color to match (default `#79404b`). |
-| `cloakUnder` | Underside / fold color to match (default `#501f3b`). |
-| `matchRadius` | Max RGB distance (0–1 scale) for a pixel to count as cloak; larger = more pixels included. |
+| `cloakColors` | Array of reference hex colors (up to **16**). See shipped `Config/cloak_palette.json`. |
+| `avoidColors` | Optional array (up to **16**). Texels close to any avoid color get the recolor mask reduced. |
+| `matchRadius` | Max RGB distance (0–1 scale) for cloak matching; larger = more pixels included. |
+| `avoidMatchRadius` | Same idea for `avoidColors`. If omitted, defaults to `matchRadius`. |
+| `debugLogging` | Optional verbose logs. |
 
-At runtime, `_SrcFront`, `_SrcUnder`, and `_MatchRadius` are set from that file. The fragment
-shader takes `min(distance(texel, front), distance(texel, under))` and smoothsteps it into a
-mask, then replaces hue/saturation with the user's color while preserving value for shading.
+At runtime, arrays are uploaded as `_SrcColors[16]` and `_AvoidColors[16]` (unused slots pushed far
+away so they never match). The fragment shader:
+
+1. Computes `min` RGB distance to cloak references → smoothstep cloak mask.
+2. If `_AvoidMatchRadius` &gt; 0, computes `min` distance to avoid references → `avoidFactor = smoothstep(inner, outer, minAvoid)` and **multiplies** the cloak mask (close to an avoid color → factor → 0).
+3. Replaces hue/saturation with the user's color while preserving value for shading.
+
+**Adding more colors:** sample pixels from the relevant atlas and append to `cloakColors` or
+`avoidColors`. Re-bake the AssetBundle after **shader** changes; JSON-only edits do not require Unity.

@@ -34,12 +34,19 @@ namespace HornetCloakColor.Client
         private static AssetBundle? _bundle;
         private static Shader? _shader;
 
+        /// <summary>Maximum number of cloak source colors the shader supports (must match the .shader define).</summary>
+        public const int MaxCloakColors = 16;
+
+        /// <summary>Maximum number of avoid colors (suppress recolor when close in RGB).</summary>
+        public const int MaxAvoidColors = 16;
+
         public static readonly int TargetHueId = Shader.PropertyToID("_TargetHue");
         public static readonly int TargetSatId = Shader.PropertyToID("_TargetSat");
         public static readonly int TargetValId = Shader.PropertyToID("_TargetVal");
-        public static readonly int SrcFrontId = Shader.PropertyToID("_SrcFront");
-        public static readonly int SrcUnderId = Shader.PropertyToID("_SrcUnder");
+        public static readonly int SrcColorsId = Shader.PropertyToID("_SrcColors");
+        public static readonly int AvoidColorsId = Shader.PropertyToID("_AvoidColors");
         public static readonly int MatchRadiusId = Shader.PropertyToID("_MatchRadius");
+        public static readonly int AvoidMatchRadiusId = Shader.PropertyToID("_AvoidMatchRadius");
         public static readonly int StrengthId = Shader.PropertyToID("_Strength");
 
         /// <summary>The loaded cloak-tint shader, or null if the bundle is unavailable.</summary>
