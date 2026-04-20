@@ -22,7 +22,8 @@ namespace HornetCloakColor.Client
     ///   "avoidColors": [],
     ///   "matchRadius": 0.18,
     ///   "avoidMatchRadius": 0.18,
-    ///   "debugLogging": false
+    ///   "debugLogging": false,
+    ///   "mapIconDebugLogging": false
     /// }
     /// </code>
     ///
@@ -59,6 +60,15 @@ namespace HornetCloakColor.Client
 
         /// <summary>Verbose log lines (e.g. color changes). Editable in <c>cloak_palette.json</c>.</summary>
         public static bool DebugLogging { get; private set; }
+
+        /// <summary>
+        /// SSMP map / compass icon sync (broadcast, late-join replay, deferred <c>CreatePlayerIcon</c>).
+        /// Independent of <see cref="DebugLogging"/> so you can trace multiplayer pins without cloak spam.
+        /// </summary>
+        public static bool MapIconDebugLogging { get; private set; }
+
+        /// <summary>True when either cloak debug or map-icon diagnostics is enabled.</summary>
+        public static bool LogMapIconDiagnostics => DebugLogging || MapIconDebugLogging;
 
         /// <summary>
         /// Substrings (case-insensitive) used by <see cref="CloakSceneScanner"/> to decide
@@ -104,6 +114,8 @@ namespace HornetCloakColor.Client
                     if (TryApplyPaletteJson(json))
                     {
                         Log.Info($"Loaded cloak palette from {diskPath} ({SrcCount} cloak / {AvoidCount} avoid reference color(s)).");
+                        if (MapIconDebugLogging)
+                            Log.Info("[MapIcon] mapIconDebugLogging is true — tracing map/compass sync; grep log for \"[MapIcon]\".");
                         return;
                     }
 
@@ -128,6 +140,7 @@ namespace HornetCloakColor.Client
             MatchRadius = 0.135f;
             AvoidMatchRadius = 0.120f;
             DebugLogging = false;
+            MapIconDebugLogging = false;
             SceneScanTextureContains = new[] { "hornet" };
             SceneScanPathContains = new[] { "hornet" };
             SceneScanIntervalFrames = 3;
@@ -160,6 +173,9 @@ namespace HornetCloakColor.Client
 
             if (TryExtractBool(trimmed, "debugLogging", out var dbg))
                 DebugLogging = dbg;
+
+            if (TryExtractBool(trimmed, "mapIconDebugLogging", out var mapIconDbg))
+                MapIconDebugLogging = mapIconDbg;
 
             var scanFilters = ExtractStringArray(trimmed, "sceneScanTextureContains");
             if (scanFilters.Count > 0)

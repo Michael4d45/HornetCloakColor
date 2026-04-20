@@ -36,7 +36,9 @@
   "_comment_avoidRadius": "Optional; if omitted, defaults to matchRadius. Same 0.02–1.0 range as matchRadius.",
   "avoidMatchRadius": 0.020,
 
-  "debugLogging": false,
+  "debugLogging": true,
+  "_comment_mapIcon": "When true, logs SSMP compass/map-icon broadcast, server late-join replay, and deferred remote icon creation (set without enabling debugLogging to avoid cloak scanner noise).",
+  "mapIconDebugLogging": true,
 
   "_comment2": "Scene-wide scanner. A sprite is considered Hornet if (a) its texture instance was already seen on a hero renderer (registry), or (b) its texture name contains one of sceneScanTextureContains, or (c) its full GameObject path contains one of sceneScanPathContains. Path matching catches scene-specific poses (resting in bed, sitting at things) whose atlas the active hero never renders directly. Set debugLogging=true to see which sprites get matched/ignored and on which path.",
   "sceneScanTextureContains": ["hornet"],

@@ -18,7 +18,7 @@ namespace HornetCloakColor
         /// Keep this in sync with &lt;Version&gt; in HornetCloakColor.csproj. The BepInAutoPlugin
         /// attribute requires a compile-time constant, so we can't read from the csproj directly.
         /// </summary>
-        public const string ModVersion = "1.6.0";
+        public const string ModVersion = "1.7.0";
 
         internal static HornetCloakColorPlugin? Instance { get; private set; }
         internal static ManualLogSource? LogSource { get; private set; }
@@ -38,6 +38,8 @@ namespace HornetCloakColor
 
             ColorConfig = new CloakColorConfig(Config);
             CloakColorApplier.SetLocalSceneColor(ColorConfig.CurrentColor);
+
+            MapMaskHarmonyPatcher.Apply();
 
             if (SSMPBridge.TryRegister())
             {
@@ -78,6 +80,10 @@ namespace HornetCloakColor
             CloakColorApplier.SetLocalSceneColor(color);
 
             SSMPBridge.NotifyLocalColorChanged(color);
+
+            LocalMapMaskTint.Refresh(global::GameManager.instance?.gameMap, color);
+            // Also push to the wide / overall map (and any other already-attached local icons).
+            MapMaskTint.BroadcastLocalColor(color);
         }
     }
 }

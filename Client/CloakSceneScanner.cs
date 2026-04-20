@@ -83,6 +83,16 @@ namespace HornetCloakColor.Client
                 if (renderer.GetComponentInParent<CloakRecolor>() != null)
                     continue;
 
+                // Map compass icons are owned by MapMaskTint (see MapMaskHarmonyPatcher).
+                // We must NOT swap their shader to the cloak hue-shift one (its avoid-color
+                // list contains white/black/grey, which is exactly the mask palette → no
+                // visible tint), and we must NOT rewrite tk2dSprite.color every frame
+                // (NestedFadeGroup uses sprite alpha to fade the icon out when the player
+                // switches between the wide/overall map and the zoomed-in map; resetting
+                // that to white pinned the wide-map icon visible on top of the zoomed view).
+                if (IsCompassIcon(renderer.transform))
+                    continue;
+
                 var texName = tex.name;
 
                 // Primary match: this exact atlas instance has been seen on a known-Hornet
@@ -144,6 +154,18 @@ namespace HornetCloakColor.Client
                     useCloakShader: true,
                     _originalShaderByRenderer);
             }
+        }
+
+        // The GameMap (zoomed-in) and InventoryWideMap (overall) compass mask GameObjects
+        // are literally named "Compass Icon". SSMP's MapManager.CreatePlayerIcon clones
+        // gameMap.compassIcon for every remote player, producing "Compass Icon(Clone)" (and
+        // "Compass Icon(Clone)(Clone)" if the same player's icon is recreated). We match
+        // the prefix so the scanner stays out of all of them.
+        private static bool IsCompassIcon(Transform t)
+        {
+            if (t == null) return false;
+            var n = t.name;
+            return n.StartsWith("Compass Icon", StringComparison.Ordinal);
         }
 
         private static bool MatchesAnyFilter(string name, string[] filters)
