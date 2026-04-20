@@ -36,18 +36,34 @@
   "_comment_avoidRadius": "Optional; if omitted, defaults to matchRadius. Same 0.02–1.0 range as matchRadius.",
   "avoidMatchRadius": 0.020,
 
-  "debugLogging": true,
+  "debugLogging": false,
   "_comment_mapIcon": "When true, logs SSMP compass/map-icon broadcast, server late-join replay, and deferred remote icon creation (set without enabling debugLogging to avoid cloak scanner noise).",
-  "mapIconDebugLogging": true,
+  "mapIconDebugLogging": false,
 
   "_comment2": "Scene-wide scanner. A sprite is considered Hornet if (a) its texture instance was already seen on a hero renderer (registry), or (b) its texture name contains one of sceneScanTextureContains, or (c) its full GameObject path contains one of sceneScanPathContains. Path matching catches scene-specific poses (resting in bed, sitting at things) whose atlas the active hero never renders directly. Set debugLogging=true to see which sprites get matched/ignored and on which path.",
   "sceneScanTextureContains": ["hornet"],
   "sceneScanPathContains": ["hornet"],
   "sceneScanIntervalFrames": 3,
 
+  "_comment_registryDeny": "When (a) alone would match, paths containing any of these substrings are skipped — shared atlas0 IDs also appear on VFX/HUD/sprite-cache tk2d sprites.",
+  "sceneScanRegistryDenyPathContains": [
+    "SpriteCache",
+    "EnemyHitEffects",
+    "Slash Impact",
+    "Hero Dash Puff",
+    "Land Effect",
+    "/HudCamera/",
+    "Thunk",
+    "Warrior Rage",
+    "Barbed Wire"
+  ],
+
+  "_comment_heroMesh": "CloakRecolor re-scans the player hierarchy for MeshRenderers every N frames (material tint still applies every LateUpdate). 1 = full scan every frame.",
+  "heroMeshRescanIntervalFrames": 30,
+
   "_comment3": "Diagnostic: when true, the first time we see each Hornet atlas we dump it as a PNG to BepInEx/plugins/HornetCloakColor/TextureDumps/ so you can correlate runtime InstanceIDs with actual sprite sheets. Off by default; turn on when you need to identify a texture, then turn off again.",
   "dumpDiscoveredTextures": false,
 
   "_comment_perf": "When true, logs aggregated [HCC/Perf] lines every ~2s: CloakRecolor LateUpdate cost (scales with player count in MP), CloakSceneScanner FindObjects+loop, and SyncRemoteMapIconsVisible call rate. Turn off after profiling.",
-  "perfDiagnostics": true
+  "perfDiagnostics": false
 }

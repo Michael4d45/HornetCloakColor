@@ -14,6 +14,10 @@ namespace HornetCloakColor.Client
     /// This component owns the renderers in its own hierarchy. <see cref="CloakSceneScanner"/>
     /// then handles "orphan" Hornet renderers that the engine spawns elsewhere in the scene
     /// (steam-vent recoil pose, item-get pose, etc.).
+    ///
+    /// Mesh renderers are cached and the hierarchy is re-scanned every
+    /// <see cref="CloakPaletteConfig.HeroMeshRescanIntervalFrames"/> (default 30) instead of every frame,
+    /// while <see cref="CloakMaterialApplier.Apply"/> still runs every <c>LateUpdate</c> so tk2d material swaps stay tinted.
     /// </summary>
     [DefaultExecutionOrder(10000)]
     [DisallowMultipleComponent]
@@ -25,19 +29,27 @@ namespace HornetCloakColor.Client
         /// <summary>Original sprite shader per renderer before we swapped in the cloak shader.</summary>
         private readonly Dictionary<MeshRenderer, Shader> _originalShaderByRenderer = new();
 
+        private readonly List<MeshRenderer> _meshCache = new();
+        private int _meshRescanCountdown;
+        private bool _meshCacheInvalid = true;
+
+        private void OnEnable() => _meshCacheInvalid = true;
+
         private void LateUpdate()
         {
             CloakMaterialApplier.PruneDestroyed(_originalShaderByRenderer);
+            MaybeRefreshMeshCache();
+
             if (PerfDiagnostics.Enabled)
             {
                 var sw = Stopwatch.StartNew();
-                var n = ApplyToAllMeshRenderersCore();
+                ApplyToCachedMeshRenderersCore();
                 sw.Stop();
-                PerfDiagnostics.RecordRecolorLateUpdate(gameObject.name, n, sw.Elapsed.TotalMilliseconds);
+                PerfDiagnostics.RecordRecolorLateUpdate(gameObject.name, _meshCache.Count, sw.Elapsed.TotalMilliseconds);
             }
             else
             {
-                ApplyToAllMeshRenderersCore();
+                ApplyToCachedMeshRenderersCore();
             }
         }
 
@@ -45,41 +57,62 @@ namespace HornetCloakColor.Client
         {
             Color          = color;
             UseCloakShader = useCloakShader;
-            ApplyToAllMeshRenderers();
+            _meshCacheInvalid = true;
+            RebuildMeshCache();
+            ApplyToCachedMeshRenderersCore();
         }
 
         public void SetColor(CloakColor color)
         {
             Color = color;
-            ApplyToAllMeshRenderers();
+            ApplyToCachedMeshRenderersCore();
         }
 
-        private void ApplyToAllMeshRenderers() => _ = ApplyToAllMeshRenderersCore();
-
-        /// <returns>Number of <see cref="MeshRenderer"/> instances returned by <c>GetComponentsInChildren</c> (includes null slots).</returns>
-        private int ApplyToAllMeshRenderersCore()
+        private void MaybeRefreshMeshCache()
         {
-            // true = include inactive (some states toggle child meshes).
+            if (_meshCacheInvalid)
+            {
+                RebuildMeshCache();
+                return;
+            }
+
+            if (--_meshRescanCountdown <= 0)
+                RebuildMeshCache();
+        }
+
+        private void RebuildMeshCache()
+        {
+            _meshCacheInvalid = false;
+            _meshRescanCountdown = Mathf.Max(1, CloakPaletteConfig.HeroMeshRescanIntervalFrames);
+            _meshCache.Clear();
+
             var renderers = GetComponentsInChildren<MeshRenderer>(true);
-            if (renderers == null || renderers.Length == 0) return 0;
+            if (renderers == null || renderers.Length == 0) return;
 
             foreach (var meshRenderer in renderers)
             {
                 if (meshRenderer == null) continue;
 
-                // SSMP's overhead name label is a TextMeshPro under a child named "Username"
-                // on the local hero. It is not part of Hornet's sprite atlases — running the
-                // cloak shader / tint on it turns the text black. Remote players apply
-                // CloakRecolor only to PlayerObject ("Player Prefab"); Username hangs off the
-                // container sibling, so it is never touched there.
                 if (IsUnderSsmpUsernameObject(meshRenderer.transform))
                     continue;
 
-                // Anything we touch here is by definition a Hornet renderer, so its
-                // current atlas is a Hornet atlas. Register it so the scene scanner can
-                // recognize the same atlas instance on orphan renderers (e.g. steam-vent
-                // recoil pose, item-get pose) where matching by texture name is hopeless
-                // (the game uses the generic name "atlas0" for many unrelated atlases).
+                _meshCache.Add(meshRenderer);
+            }
+        }
+
+        private void ApplyToCachedMeshRenderersCore()
+        {
+            foreach (var meshRenderer in _meshCache)
+            {
+                if (meshRenderer == null)
+                {
+                    _meshCacheInvalid = true;
+                    continue;
+                }
+
+                if (IsUnderSsmpUsernameObject(meshRenderer.transform))
+                    continue;
+
                 var shared = meshRenderer.sharedMaterial;
                 if (shared != null)
                 {
@@ -95,8 +128,6 @@ namespace HornetCloakColor.Client
                     UseCloakShader,
                     _originalShaderByRenderer);
             }
-
-            return renderers.Length;
         }
 
         /// <summary>Matches <c>SSMP.Game.Client.PlayerManager.UsernameObjectName</c> ("Username").</summary>

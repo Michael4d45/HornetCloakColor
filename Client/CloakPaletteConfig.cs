@@ -98,6 +98,20 @@ namespace HornetCloakColor.Client
         public static int SceneScanIntervalFrames { get; private set; }
 
         /// <summary>
+        /// Substrings (case-insensitive) matched against the full GameObject path. When a sprite
+        /// would match only via <see cref="HornetTextureRegistry"/> (shared <c>atlas0</c> instance IDs),
+        /// hits on these paths are ignored so VFX / HUD / sprite-cache objects are not recolored.
+        /// </summary>
+        public static string[] SceneScanRegistryDenyPathContains { get; private set; } = Array.Empty<string>();
+
+        /// <summary>
+        /// How often <see cref="CloakRecolor"/> re-runs <c>GetComponentsInChildren</c> for <see cref="MeshRenderer"/> to
+        /// refresh its cache (material re-apply still runs every <c>LateUpdate</c>). Higher = cheaper;
+        /// lower picks up new child meshes from animations sooner. 1 = previous behavior (full scan every frame).
+        /// </summary>
+        public static int HeroMeshRescanIntervalFrames { get; private set; }
+
+        /// <summary>
         /// When true, the first time the mod sees each Hornet atlas it dumps a PNG to
         /// <c>BepInEx/plugins/HornetCloakColor/TextureDumps/</c>. Useful for figuring out
         /// which sprite sheet maps to a runtime <c>InstanceID</c> and for sampling colors
@@ -153,6 +167,19 @@ namespace HornetCloakColor.Client
             SceneScanTextureContains = new[] { "hornet" };
             SceneScanPathContains = new[] { "hornet" };
             SceneScanIntervalFrames = 3;
+            SceneScanRegistryDenyPathContains = new[]
+            {
+                "SpriteCache",
+                "EnemyHitEffects",
+                "Slash Impact",
+                "Hero Dash Puff",
+                "Land Effect",
+                "/HudCamera/",
+                "Thunk",
+                "Warrior Rage",
+                "Barbed Wire",
+            };
+            HeroMeshRescanIntervalFrames = 30;
             DumpDiscoveredTextures = false;
             PerfDiagnostics = false;
         }
@@ -197,6 +224,13 @@ namespace HornetCloakColor.Client
 
             if (TryExtractInt(trimmed, "sceneScanIntervalFrames", out var iv) && iv > 0 && iv <= 240)
                 SceneScanIntervalFrames = iv;
+
+            var denyRegistryPaths = ExtractStringArray(trimmed, "sceneScanRegistryDenyPathContains");
+            if (denyRegistryPaths.Count > 0)
+                SceneScanRegistryDenyPathContains = denyRegistryPaths.ToArray();
+
+            if (TryExtractInt(trimmed, "heroMeshRescanIntervalFrames", out var heroIv) && heroIv > 0 && heroIv <= 600)
+                HeroMeshRescanIntervalFrames = heroIv;
 
             if (TryExtractBool(trimmed, "dumpDiscoveredTextures", out var dump))
                 DumpDiscoveredTextures = dump;

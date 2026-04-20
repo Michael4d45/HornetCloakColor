@@ -137,7 +137,19 @@ namespace HornetCloakColor.Client
                 // Primary match: this exact atlas instance has been seen on a known-Hornet
                 // renderer. Reliable because instance IDs are unique per asset, even when
                 // many unrelated atlases share the name "atlas0".
-                var instanceMatch = HornetTextureRegistry.Contains(tex);
+                //
+                // Shared atlas textures also appear on VFX / HUD / sprite-cache objects; those
+                // paths are filtered out via SceneScanRegistryDenyPathContains so we do not
+                // recolor unrelated tk2d sprites that happen to share the same Texture instance.
+                string? path = null;
+                var registryHit = HornetTextureRegistry.Contains(tex);
+                var instanceMatch = registryHit;
+                if (registryHit && CloakPaletteConfig.SceneScanRegistryDenyPathContains.Length > 0)
+                {
+                    path = GetPath(renderer.transform);
+                    if (MatchesAnyFilter(path, CloakPaletteConfig.SceneScanRegistryDenyPathContains))
+                        instanceMatch = false;
+                }
 
                 // Fallback 1: texture name substring (rarely useful — Silksong's Hornet
                 // atlases are named atlas0/atlas1/etc., shared with many unrelated atlases).
@@ -148,7 +160,6 @@ namespace HornetCloakColor.Client
                 // Fallback 2: GameObject path substring. The bed/sit poses live under
                 // scene-specific GameObjects whose name contains "Hornet" but whose atlas
                 // hasn't been seen by the active hero yet, so registry/name both miss.
-                string? path = null;
                 var pathMatch = false;
                 if (!instanceMatch && !nameMatch
                     && pathFilters != null && pathFilters.Length > 0)

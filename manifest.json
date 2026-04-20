@@ -1,6 +1,6 @@
 {
     "name": "HornetCloakColor",
-    "version_number": "1.7.2",
+    "version_number": "1.7.3",
     "website_url": "https://github.com/Michael4d45/HornetCloakColor",
     "description": "Change the color of Hornet's cloak. Fully synchronized with other SSMP players.",
     "dependencies": [
