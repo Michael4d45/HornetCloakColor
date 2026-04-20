@@ -53,6 +53,14 @@ namespace HornetCloakColor.Client
             {
                 if (meshRenderer == null) continue;
 
+                // SSMP's overhead name label is a TextMeshPro under a child named "Username"
+                // on the local hero. It is not part of Hornet's sprite atlases — running the
+                // cloak shader / tint on it turns the text black. Remote players apply
+                // CloakRecolor only to PlayerObject ("Player Prefab"); Username hangs off the
+                // container sibling, so it is never touched there.
+                if (IsUnderSsmpUsernameObject(meshRenderer.transform))
+                    continue;
+
                 // Anything we touch here is by definition a Hornet renderer, so its
                 // current atlas is a Hornet atlas. Register it so the scene scanner can
                 // recognize the same atlas instance on orphan renderers (e.g. steam-vent
@@ -73,6 +81,16 @@ namespace HornetCloakColor.Client
                     UseCloakShader,
                     _originalShaderByRenderer);
             }
+        }
+
+        /// <summary>Matches <c>SSMP.Game.Client.PlayerManager.UsernameObjectName</c> ("Username").</summary>
+        private static bool IsUnderSsmpUsernameObject(Transform t)
+        {
+            for (var p = t; p != null; p = p.parent)
+            {
+                if (p.name == "Username") return true;
+            }
+            return false;
         }
 
         public static CloakRecolor? AttachOrUpdate(GameObject? playerObject, CloakColor color, bool useCloakShader)

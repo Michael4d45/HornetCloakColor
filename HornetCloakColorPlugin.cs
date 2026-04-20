@@ -18,7 +18,7 @@ namespace HornetCloakColor
         /// Keep this in sync with &lt;Version&gt; in HornetCloakColor.csproj. The BepInAutoPlugin
         /// attribute requires a compile-time constant, so we can't read from the csproj directly.
         /// </summary>
-        public const string ModVersion = "1.7.0";
+        public const string ModVersion = "1.7.1";
 
         internal static HornetCloakColorPlugin? Instance { get; private set; }
         internal static ManualLogSource? LogSource { get; private set; }
