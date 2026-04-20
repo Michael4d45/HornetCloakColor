@@ -20,7 +20,7 @@
     <PathMap Condition="'$(Configuration)' == 'Release'">$(MSBuildProjectDirectory)=/</PathMap>
 
     <AssemblyTitle>HornetCloakColor</AssemblyTitle>
-    <Version>1.7.1</Version>
+    <Version>1.7.2</Version>
 
     <BepInExPluginGuid>hornet.cloak.color</BepInExPluginGuid>
     <BepInExPluginName>HornetCloakColor</BepInExPluginName>

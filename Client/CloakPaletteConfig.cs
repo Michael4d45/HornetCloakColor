@@ -23,7 +23,8 @@ namespace HornetCloakColor.Client
     ///   "matchRadius": 0.18,
     ///   "avoidMatchRadius": 0.18,
     ///   "debugLogging": false,
-    ///   "mapIconDebugLogging": false
+    ///   "mapIconDebugLogging": false,
+    ///   "perfDiagnostics": false
     /// }
     /// </code>
     ///
@@ -71,6 +72,12 @@ namespace HornetCloakColor.Client
         public static bool LogMapIconDiagnostics => DebugLogging || MapIconDebugLogging;
 
         /// <summary>
+        /// When true, logs aggregated <c>[HCC/Perf]</c> lines every ~2s for
+        /// <see cref="CloakRecolor"/>, <see cref="CloakSceneScanner"/>, and map sync. Off by default.
+        /// </summary>
+        public static bool PerfDiagnostics { get; private set; }
+
+        /// <summary>
         /// Substrings (case-insensitive) used by <see cref="CloakSceneScanner"/> to decide
         /// whether a tk2dSprite's main texture belongs to Hornet. Default: <c>["hornet"]</c>.
         /// </summary>
@@ -116,6 +123,8 @@ namespace HornetCloakColor.Client
                         Log.Info($"Loaded cloak palette from {diskPath} ({SrcCount} cloak / {AvoidCount} avoid reference color(s)).");
                         if (MapIconDebugLogging)
                             Log.Info("[MapIcon] mapIconDebugLogging is true — tracing map/compass sync; grep log for \"[MapIcon]\".");
+                        if (PerfDiagnostics)
+                            Log.Info("[HCC/Perf] perfDiagnostics is true — grep BepInEx log for \"[HCC/Perf]\" (≈2s rolling window).");
                         return;
                     }
 
@@ -145,6 +154,7 @@ namespace HornetCloakColor.Client
             SceneScanPathContains = new[] { "hornet" };
             SceneScanIntervalFrames = 3;
             DumpDiscoveredTextures = false;
+            PerfDiagnostics = false;
         }
 
         /// <summary>
@@ -190,6 +200,9 @@ namespace HornetCloakColor.Client
 
             if (TryExtractBool(trimmed, "dumpDiscoveredTextures", out var dump))
                 DumpDiscoveredTextures = dump;
+
+            if (TryExtractBool(trimmed, "perfDiagnostics", out var perf))
+                PerfDiagnostics = perf;
 
             return true;
         }

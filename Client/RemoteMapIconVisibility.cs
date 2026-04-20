@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Reflection;
 using HarmonyLib;
 using HornetCloakColor.Shared;
@@ -48,6 +49,8 @@ namespace HornetCloakColor.Client
         {
             if (_clientManager == null) return;
 
+            var sw = PerfDiagnostics.Enabled ? Stopwatch.StartNew() : null;
+
             try
             {
                 var mm = _clientManager.GetType()
@@ -74,6 +77,14 @@ namespace HornetCloakColor.Client
             {
                 if (CloakPaletteConfig.LogMapIconDiagnostics)
                     Log.Warn($"[MapIcon] SyncRemoteMapIconsVisible: {ex.Message}");
+            }
+            finally
+            {
+                if (sw != null)
+                {
+                    sw.Stop();
+                    PerfDiagnostics.RecordMapSyncVisible(sw.Elapsed.TotalMilliseconds);
+                }
             }
         }
 

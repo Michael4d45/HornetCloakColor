@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
 using HornetCloakColor.Shared;
 using UnityEngine;
@@ -60,11 +61,49 @@ namespace HornetCloakColor.Client
             var nameFilters = CloakPaletteConfig.SceneScanTextureContains;
             var pathFilters = CloakPaletteConfig.SceneScanPathContains;
 
-            // Scene-wide scan; gated by ScanIntervalFrames. FindObjectsSortMode.None is the
-            // cheap variant (we don't need a stable instance-ID order).
-            var sprites = FindObjectsByType<tk2dSprite>(FindObjectsSortMode.None);
-            if (sprites == null || sprites.Length == 0) return;
+            double findMs;
+            tk2dSprite[] sprites;
+            if (PerfDiagnostics.Enabled)
+            {
+                var swFind = Stopwatch.StartNew();
+                sprites = FindObjectsByType<tk2dSprite>(FindObjectsSortMode.None);
+                swFind.Stop();
+                findMs = swFind.Elapsed.TotalMilliseconds;
+            }
+            else
+            {
+                // Scene-wide scan; gated by ScanIntervalFrames. FindObjectsSortMode.None is the
+                // cheap variant (we don't need a stable instance-ID order).
+                sprites = FindObjectsByType<tk2dSprite>(FindObjectsSortMode.None);
+                findMs = 0;
+            }
 
+            if (sprites == null || sprites.Length == 0)
+            {
+                if (PerfDiagnostics.Enabled)
+                    PerfDiagnostics.RecordSceneScan(0, 0, findMs, 0);
+                return;
+            }
+
+            int applied;
+            double loopMs;
+            if (PerfDiagnostics.Enabled)
+            {
+                var swLoop = Stopwatch.StartNew();
+                applied = RunScanLoop(sprites, nameFilters, pathFilters);
+                swLoop.Stop();
+                loopMs = swLoop.Elapsed.TotalMilliseconds;
+                PerfDiagnostics.RecordSceneScan(sprites.Length, applied, findMs, loopMs);
+            }
+            else
+            {
+                _ = RunScanLoop(sprites, nameFilters, pathFilters);
+            }
+        }
+
+        private int RunScanLoop(tk2dSprite[] sprites, string[]? nameFilters, string[]? pathFilters)
+        {
+            var applied = 0;
             foreach (var sprite in sprites)
             {
                 if (sprite == null) continue;
@@ -153,7 +192,10 @@ namespace HornetCloakColor.Client
                     _color,
                     useCloakShader: true,
                     _originalShaderByRenderer);
+                applied++;
             }
+
+            return applied;
         }
 
         // The GameMap (zoomed-in) and InventoryWideMap (overall) compass mask GameObjects

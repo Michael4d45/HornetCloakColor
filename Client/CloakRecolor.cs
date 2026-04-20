@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using HornetCloakColor.Shared;
 using UnityEngine;
 
@@ -27,7 +28,17 @@ namespace HornetCloakColor.Client
         private void LateUpdate()
         {
             CloakMaterialApplier.PruneDestroyed(_originalShaderByRenderer);
-            ApplyToAllMeshRenderers();
+            if (PerfDiagnostics.Enabled)
+            {
+                var sw = Stopwatch.StartNew();
+                var n = ApplyToAllMeshRenderersCore();
+                sw.Stop();
+                PerfDiagnostics.RecordRecolorLateUpdate(gameObject.name, n, sw.Elapsed.TotalMilliseconds);
+            }
+            else
+            {
+                ApplyToAllMeshRenderersCore();
+            }
         }
 
         public void Configure(CloakColor color, bool useCloakShader)
@@ -43,11 +54,14 @@ namespace HornetCloakColor.Client
             ApplyToAllMeshRenderers();
         }
 
-        private void ApplyToAllMeshRenderers()
+        private void ApplyToAllMeshRenderers() => _ = ApplyToAllMeshRenderersCore();
+
+        /// <returns>Number of <see cref="MeshRenderer"/> instances returned by <c>GetComponentsInChildren</c> (includes null slots).</returns>
+        private int ApplyToAllMeshRenderersCore()
         {
             // true = include inactive (some states toggle child meshes).
             var renderers = GetComponentsInChildren<MeshRenderer>(true);
-            if (renderers == null || renderers.Length == 0) return;
+            if (renderers == null || renderers.Length == 0) return 0;
 
             foreach (var meshRenderer in renderers)
             {
@@ -81,6 +95,8 @@ namespace HornetCloakColor.Client
                     UseCloakShader,
                     _originalShaderByRenderer);
             }
+
+            return renderers.Length;
         }
 
         /// <summary>Matches <c>SSMP.Game.Client.PlayerManager.UsernameObjectName</c> ("Username").</summary>
