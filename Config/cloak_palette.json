@@ -36,6 +36,9 @@
   "_comment_avoidRadius": "Optional; if omitted, defaults to matchRadius. Same 0.02–1.0 range as matchRadius.",
   "avoidMatchRadius": 0.020,
 
+  "_comment_useCloakMaskTextures": "When true, R masks live in CloakMasks/<tk2d collection>/<MainTex.name>.png. Missing PNGs are GPU-baked (CloakMaskBake.shader, same math as in-game). Rebuild Resources/cloakshader.bundle with BOTH CloakHueShift + CloakMaskBake (Shaders/README.md). Delete old black PNGs after rebundling.",
+  "useCloakMaskTextures": true,
+
   "debugLogging": false,
   "_comment_mapIcon": "When true, logs SSMP compass/map-icon sync (without cloak scanner noise unless debugLogging is on).",
   "mapIconDebugLogging": false,
@@ -98,7 +101,7 @@
 
   "_comment_heroMesh": "CloakRecolor re-scans the player MeshRenderer list every N frames; material re-apply is still every LateUpdate.",
   "heroMeshRescanIntervalFrames": 30,
-  "_comment_dump": "When true: dump to BepInEx/plugins/HornetCloakColor/TextureDumps/ — Texture2D/<name>.png, copies under each tk2d collection folder, and texture_dump_manifest.json (no extra subfolders: layout is built-in).",
+  "_comment_dump": "When true: writes TextureDumps/<tk2d collection>/<Texture.name>.png (same path pattern as CloakMasks/) plus texture_dump_manifest.json.",
   "dumpDiscoveredTextures": false,
 
   "_comment_perf": "Aggregated [HCC/Perf] lines every ~2s when true.",

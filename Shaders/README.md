@@ -11,8 +11,9 @@ shipped as an `AssetBundle` so the mod can ship as a single DLL.
 
 | File | Purpose |
 | ---- | ------- |
-| `CloakHueShift.shader` | Shader source (RGB cloak mask + optional avoid mask + HSV hue replacement). |
-| `Editor/BuildCloakShaderBundle.cs` | Unity editor menu that builds the AssetBundle. |
+| `CloakHueShift.shader` | In-game shader (RGB cloak mask + optional avoid mask + HSV hue replacement). |
+| `CloakMaskBake.shader` | Same cloak/avoid mask math only — used to bake `CloakMasks/**/*.png` on disk (must ship in the same bundle). |
+| `Editor/BuildCloakShaderBundle.cs` | Unity editor menu that builds the AssetBundle (both shaders). |
 
 ## How to bake the AssetBundle
 
@@ -21,7 +22,8 @@ You only need to do this once (or whenever the shader changes).
 1. Install **Unity 6000.0.50** (the version Silksong ships with). Other 6000.x patches
    should also work; major version mismatches will refuse to load at runtime.
 2. Create a new empty 3D project.
-3. Copy `CloakHueShift.shader` into the project at `Assets/Shaders/CloakHueShift.shader`.
+3. Copy **both** `CloakHueShift.shader` and `CloakMaskBake.shader` into the project at
+   `Assets/Shaders/CloakHueShift.shader` and `Assets/Shaders/CloakMaskBake.shader`.
 4. Copy `Editor/BuildCloakShaderBundle.cs` into the project at
    `Assets/Editor/BuildCloakShaderBundle.cs`.
 5. From the menu bar, choose **HornetCloakColor → Build Shader Bundle (Windows)**

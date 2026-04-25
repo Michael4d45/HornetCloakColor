@@ -20,6 +20,9 @@ Shader "HornetCloakColor/CloakHueShift"
         _MatchRadius ("RGB Match Radius", Range(0.02,0.6)) = 0.18
         _AvoidMatchRadius ("Avoid RGB Radius", Range(0.02,0.6)) = 0.18
         _Strength ("Recolor Strength", Range(0,1)) = 1.0
+
+        [NoScaleOffset] _CloakMaskTex ("Cloak Mask (R = weight)", 2D) = "white" {}
+        _UseCloakMaskTex ("Use Mask Texture (0=procedural)", Range(0,1)) = 0
     }
 
     SubShader
@@ -64,6 +67,7 @@ Shader "HornetCloakColor/CloakHueShift"
 
             sampler2D _MainTex;
             float4    _MainTex_ST;
+            sampler2D _CloakMaskTex;
             fixed4    _Color;
 
             float _TargetHue;
@@ -72,6 +76,7 @@ Shader "HornetCloakColor/CloakHueShift"
             float _MatchRadius;
             float _AvoidMatchRadius;
             float _Strength;
+            float _UseCloakMaskTex;
 
             // Filled from C# every frame. Unused slots are pushed far away (rgb = 10) so
             // distance() stays huge and they never contribute to the mask.
@@ -118,7 +123,7 @@ Shader "HornetCloakColor/CloakHueShift"
                 }
 
                 float inner = _MatchRadius * 0.35;
-                float mask = (1.0 - smoothstep(inner, _MatchRadius, minD)) * _Strength;
+                float proceduralMask = (1.0 - smoothstep(inner, _MatchRadius, minD));
 
                 // Suppress recolor where texel is close to any avoid color (skin, trim, etc.)
                 if (_AvoidMatchRadius > 1e-5)
@@ -132,8 +137,13 @@ Shader "HornetCloakColor/CloakHueShift"
                     }
                     float aInner = _AvoidMatchRadius * 0.35;
                     float avoidFactor = smoothstep(aInner, _AvoidMatchRadius, minAvoid);
-                    mask *= avoidFactor;
+                    proceduralMask *= avoidFactor;
                 }
+
+                proceduralMask *= _Strength;
+
+                float texMask = tex2D(_CloakMaskTex, IN.texcoord).r * _Strength;
+                float mask = lerp(proceduralMask, texMask, saturate(_UseCloakMaskTex));
 
                 float3 hsv = RGBtoHSV(t);
                 float3 hsvOut = float3(_TargetHue,

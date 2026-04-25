@@ -152,11 +152,15 @@ A `thunderstore/dist/*.zip` is produced automatically alongside the compiled DLL
 - The server keeps a simple in-memory table of `playerId -> CloakColor` and replays it to any
   new joiner so late arrivals see correct colors immediately.
 
+## Shipped `CloakMasks/` (optional texture masks)
+
+The repo includes **`CloakMasks/<tk2d collection>/<atlas>.png`** next to the project root (same paths the mod uses under `BepInEx/plugins/HornetCloakColor/`). These files are **version-controlled**, copied into the build output with the DLL, and included in Thunderstore zips. Update them in the repo when you tune masks; the game can still overwrite or add files at runtime when `useCloakMaskTextures` is enabled.
+
 ## Baking the shader bundle
 
-The cloak-only path requires `Resources/cloakshader.bundle`. It's gitignored, so contributors
-need to bake it in Unity once. See [Shaders/README.md](./Shaders/README.md) for step-by-step
-instructions (TL;DR: open Unity 6000.0.50, drop the shader and editor script in, click
+The cloak-only path requires `Resources/cloakshader.bundle` (embeds **CloakHueShift** and **CloakMaskBake**).
+It's gitignored, so contributors need to bake it in Unity once. See [Shaders/README.md](./Shaders/README.md)
+for step-by-step instructions (TL;DR: open Unity 6000.0.50, drop both `.shader` files and the editor script in,
 **HornetCloakColor → Build Shader Bundle**, copy the output to `Resources/`).
 
 If the bundle isn't present the build still succeeds and the mod gracefully falls back to

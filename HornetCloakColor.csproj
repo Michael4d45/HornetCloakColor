@@ -57,6 +57,10 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>cloak_palette.json</Link>
     </None>
+    <!-- Shipped default / curated mask PNGs (same layout as runtime CloakMasks/). -->
+    <None Include="CloakMasks\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <!--
@@ -89,6 +93,7 @@
       <Binaries Include="$(TargetDir)HornetCloakColor.SSMP.dll" LocalDir="/" PackDir="/" Condition="Exists('$(TargetDir)HornetCloakColor.SSMP.dll')" />
       <Binaries Include="$(TargetDir)HornetCloakColor.SSMP.pdb" LocalDir="/" PackDir="/" Condition="Exists('$(TargetDir)HornetCloakColor.SSMP.pdb')" />
       <Binaries Include="$(TargetDir)/cloak_palette.json" LocalDir="/" PackDir="/" Condition="Exists('$(TargetDir)/cloak_palette.json')" />
+      <_CloakMaskShipped Include="$(MSBuildProjectDirectory)\CloakMasks\**\*.*" Condition="Exists('$(MSBuildProjectDirectory)\CloakMasks')" />
     </ItemGroup>
     <PropertyGroup>
       <ThunderstoreDir>$(ProjectDir)/thunderstore</ThunderstoreDir>
@@ -98,6 +103,10 @@
     <Copy SourceFiles="@(Binaries)"
           DestinationFolder="$(SilksongPluginsFolder)/$(AssemblyTitle)/%(Binaries.LocalDir)"
           Condition="'$(SilksongPluginsFolder)' != '' And Exists('$(SilksongPluginsFolder)')" />
+    <Copy SourceFiles="@(_CloakMaskShipped)"
+          DestinationFiles="$(SilksongPluginsFolder)/$(AssemblyTitle)/CloakMasks/%(RecursiveDir)%(Filename)%(Extension)"
+          SkipUnchangedFiles="true"
+          Condition="'$(SilksongPluginsFolder)' != '' And Exists('$(SilksongPluginsFolder)') And '@(_CloakMaskShipped)' != ''" />
 
     <!-- Thunderstore packaging (only runs when both the toml and the package icon exist) -->
     <PropertyGroup>
@@ -108,6 +117,10 @@
     <Copy SourceFiles="@(Binaries)"
           DestinationFolder="$(ThunderstoreDir)/temp/%(Binaries.PackDir)"
           Condition="'$(CanPackThunderstore)' == 'true'" />
+    <Copy SourceFiles="@(_CloakMaskShipped)"
+          DestinationFiles="$(ThunderstoreDir)/temp/CloakMasks/%(RecursiveDir)%(Filename)%(Extension)"
+          SkipUnchangedFiles="true"
+          Condition="'$(CanPackThunderstore)' == 'true' And '@(_CloakMaskShipped)' != ''" />
     <Exec Command="dotnet tool restore"
           Condition="'$(CanPackThunderstore)' == 'true'" />
     <Exec Command="dotnet tcli build --config-path &quot;$(ThunderstoreDir)/thunderstore.toml&quot; --package-name &quot;$(AssemblyTitle)&quot; --package-version $(Version)"

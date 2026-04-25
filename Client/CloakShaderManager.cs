@@ -6,38 +6,23 @@ using UnityEngine;
 namespace HornetCloakColor.Client
 {
     /// <summary>
-    /// Loads the <c>CloakHueShift</c> shader from the AssetBundle embedded in the mod DLL
-    /// and exposes a singleton handle to it.
-    ///
-    /// The bundle is shipped as an embedded resource (<c>HornetCloakColor.Resources.cloakshader.bundle</c>)
-    /// so the user only ever copies a single DLL into BepInEx/plugins. If the bundle isn't
-    /// present (e.g. someone forgot to bake it) we degrade gracefully — <see cref="Shader"/>
-    /// returns null and callers fall back to the legacy full-character tint.
+    /// Loads cloak shaders from the AssetBundle embedded in the mod DLL
+    /// (<c>HornetCloakColor.Resources.cloakshader.bundle</c>).
     /// </summary>
     internal static class CloakShaderManager
     {
-        /// <summary>
-        /// Value of <see cref="Shader.name"/> at runtime (the <c>Shader "…"</c> line in the .shader file).
-        /// </summary>
         private const string ShaderName = "HornetCloakColor/CloakHueShift";
-
-        /// <summary>
-        /// Default Unity asset name for <c>CloakHueShift.shader</c>. <see cref="AssetBundle.LoadAsset{T}(string)"/>
-        /// matches the **asset** name (usually the file name without extension), not <see cref="ShaderName"/>.
-        /// </summary>
         private const string ShaderAssetName = "CloakHueShift";
+        private const string MaskBakeShaderName = "HornetCloakColor/CloakMaskBake";
+        private const string MaskBakeAssetName = "CloakMaskBake";
 
-        // Resource paths — keep in sync with the EmbeddedResource entry in HornetCloakColor.csproj.
         private const string ResourceName = "HornetCloakColor.Resources.cloakshader.bundle";
 
-        private static bool _attemptedLoad;
         private static AssetBundle? _bundle;
         private static Shader? _shader;
+        private static Shader? _maskBakeShader;
 
-        /// <summary>Maximum number of cloak source colors the shader supports (must match the .shader define).</summary>
         public const int MaxCloakColors = 16;
-
-        /// <summary>Maximum number of avoid colors (suppress recolor when close in RGB).</summary>
         public const int MaxAvoidColors = 16;
 
         public static readonly int TargetHueId = Shader.PropertyToID("_TargetHue");
@@ -48,31 +33,48 @@ namespace HornetCloakColor.Client
         public static readonly int MatchRadiusId = Shader.PropertyToID("_MatchRadius");
         public static readonly int AvoidMatchRadiusId = Shader.PropertyToID("_AvoidMatchRadius");
         public static readonly int StrengthId = Shader.PropertyToID("_Strength");
+        public static readonly int CloakMaskTexId = Shader.PropertyToID("_CloakMaskTex");
+        public static readonly int UseCloakMaskTexId = Shader.PropertyToID("_UseCloakMaskTex");
 
         /// <summary>The loaded cloak-tint shader, or null if the bundle is unavailable.</summary>
         public static Shader? Shader
         {
             get
             {
-                if (_attemptedLoad) return _shader;
-                _attemptedLoad = true;
-                _shader = LoadShader();
+                EnsureInitialized();
                 return _shader;
             }
         }
 
-        /// <summary>True once we've tried to load and failed; lets callers log a single warning.</summary>
-        public static bool BundleMissing => _attemptedLoad && _shader == null;
-
-        private static Shader? LoadShader()
+        /// <summary>
+        /// GPU-only mask bake shader (same mask math as <see cref="Shader"/>). Null if the embedded bundle
+        /// predates <c>CloakMaskBake.shader</c> — rebuild the bundle from the Unity editor menu.
+        /// </summary>
+        public static Shader? MaskBakeShader
         {
+            get
+            {
+                EnsureInitialized();
+                return _maskBakeShader;
+            }
+        }
+
+        public static bool BundleMissing => _bundleInitialized && _shader == null;
+
+        private static bool _bundleInitialized;
+
+        private static void EnsureInitialized()
+        {
+            if (_bundleInitialized) return;
+            _bundleInitialized = true;
+
             var asm = Assembly.GetExecutingAssembly();
             using var stream = asm.GetManifestResourceStream(ResourceName);
             if (stream == null)
             {
                 Log.Warn($"Cloak shader bundle not embedded ({ResourceName}). " +
                          "Cloak-only recolor disabled; falling back to whole-character tint.");
-                return null;
+                return;
             }
 
             using var ms = new MemoryStream();
@@ -86,28 +88,26 @@ namespace HornetCloakColor.Client
             catch (System.Exception ex)
             {
                 Log.Error($"Failed to load cloak shader bundle: {ex}");
-                return null;
+                return;
             }
 
             if (_bundle == null)
             {
                 Log.Warn("AssetBundle.LoadFromMemory returned null for the cloak shader bundle.");
-                return null;
+                return;
             }
 
-            var shader = TryLoadShaderFromBundle(_bundle);
-            if (shader == null)
-            {
-                Log.Warn($"Cloak shader not found in embedded bundle (expected asset name '{ShaderAssetName}' "
-                         + $"or runtime name '{ShaderName}'). Rebuild the bundle from Shaders/CloakHueShift.shader.");
-                return null;
-            }
+            _shader = TryLoadCloakHueShift(_bundle);
+            if (_shader != null)
+                Log.Info($"Loaded cloak shader '{_shader.name}' from embedded bundle.");
+            else
+                Log.Warn($"Cloak shader not found in embedded bundle (expected '{ShaderAssetName}' or '{ShaderName}'). " +
+                         "Rebuild the bundle from Shaders/.");
 
-            Log.Info($"Loaded cloak shader '{shader.name}' from embedded bundle.");
-            return shader;
+            _maskBakeShader = TryLoadMaskBake(_bundle);
         }
 
-        private static Shader? TryLoadShaderFromBundle(AssetBundle bundle)
+        private static Shader? TryLoadCloakHueShift(AssetBundle bundle)
         {
             var s = bundle.LoadAsset<Shader>(ShaderAssetName);
             if (s != null) return s;
@@ -124,6 +124,22 @@ namespace HornetCloakColor.Client
             }
 
             return all.Length == 1 ? all[0] : null;
+        }
+
+        private static Shader? TryLoadMaskBake(AssetBundle bundle)
+        {
+            var s = bundle.LoadAsset<Shader>(MaskBakeAssetName);
+            if (s != null) return s;
+
+            s = bundle.LoadAsset<Shader>(MaskBakeShaderName);
+            if (s != null) return s;
+
+            foreach (var sh in bundle.LoadAllAssets<Shader>())
+            {
+                if (sh != null && sh.name == MaskBakeShaderName) return sh;
+            }
+
+            return null;
         }
     }
 }

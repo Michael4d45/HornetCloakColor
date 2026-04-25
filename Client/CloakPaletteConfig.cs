@@ -82,8 +82,15 @@ namespace HornetCloakColor.Client
         public static int HeroMeshRescanIntervalFrames { get; private set; }
 
         /// <summary>
+        /// When true, per-atlas R masks in <c>&lt;plugin&gt;/CloakMasks/&lt;collection&gt;/&lt;MainTex.name&gt;.png</c> replace the
+        /// procedural RGB distance mask (same weight the shader would compute, including avoid colors).
+        /// Missing PNGs are generated once next to the DLL so you can hand-edit them.
+        /// </summary>
+        public static bool UseCloakMaskTextures { get; private set; }
+
+        /// <summary>
         /// When true, walks every texture slot on each player <see cref="MeshRenderer"/>
-        /// shared material, dumps each distinct atlas as PNG under <c>TextureDumps</c> (see
+        /// shared material, dumps each distinct atlas as PNG under <c>TextureDumps/&lt;collection&gt;/</c> (see
         /// <see cref="TextureDumper"/> for layout) and maintains
         /// <c>texture_dump_manifest.json</c> with allowlist vs main-texture-slot
         /// flags for tuning false positives / false negatives. Default: false (cheap), turn on temporarily.
@@ -122,35 +129,39 @@ namespace HornetCloakColor.Client
             ApplyDefaults();
 
             var dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            if (string.IsNullOrEmpty(dir)) return;
-
-            var diskPath = Path.Combine(dir, "cloak_palette.json");
-            if (File.Exists(diskPath))
+            if (!string.IsNullOrEmpty(dir))
             {
-                try
+                var diskPath = Path.Combine(dir, "cloak_palette.json");
+                if (File.Exists(diskPath))
                 {
-                    var json = File.ReadAllText(diskPath);
-                    if (TryApplyPaletteJson(json))
+                    try
                     {
-                        var allow = $"{CollectionNameContains.Length} collection allowlist substring(s)";
-                        if (SceneScanAllowlistEmpty)
-                            Log.Warn($"Loaded cloak palette from {diskPath} ({SrcCount} cloak / {AvoidCount} avoid). Scene scan allowlist is empty — orphan Hornet sprites will not be tinted; fill collectionNameContains.");
+                        var json = File.ReadAllText(diskPath);
+                        if (TryApplyPaletteJson(json))
+                        {
+                            var allow = $"{CollectionNameContains.Length} collection allowlist substring(s)";
+                            if (SceneScanAllowlistEmpty)
+                                Log.Warn($"Loaded cloak palette from {diskPath} ({SrcCount} cloak / {AvoidCount} avoid). Scene scan allowlist is empty — orphan Hornet sprites will not be tinted; fill collectionNameContains.");
+                            else
+                                Log.Info($"Loaded cloak palette from {diskPath} ({SrcCount} cloak / {AvoidCount} avoid; {allow}).");
+                            if (MapIconDebugLogging)
+                                Log.Info("[MapIcon] mapIconDebugLogging is true — tracing map/compass sync; grep log for \"[MapIcon]\".");
+                            if (PerfDiagnostics)
+                                Log.Info("[HCC/Perf] perfDiagnostics is true — grep BepInEx log for \"[HCC/Perf]\" (≈2s rolling window).");
+                            if (UseCloakMaskTextures)
+                                Log.Info("[CloakMasks] useCloakMaskTextures enabled — R masks in CloakMasks/<atlas name>.png (auto-generated if missing).");
+                        }
                         else
-                            Log.Info($"Loaded cloak palette from {diskPath} ({SrcCount} cloak / {AvoidCount} avoid; {allow}).");
-                        if (MapIconDebugLogging)
-                            Log.Info("[MapIcon] mapIconDebugLogging is true — tracing map/compass sync; grep log for \"[MapIcon]\".");
-                        if (PerfDiagnostics)
-                            Log.Info("[HCC/Perf] perfDiagnostics is true — grep BepInEx log for \"[HCC/Perf]\" (≈2s rolling window).");
-                        return;
+                            Log.Warn("cloak_palette.json was not valid; using built-in defaults from the mod DLL.");
                     }
-
-                    Log.Warn("cloak_palette.json was not valid; using built-in defaults from the mod DLL.");
-                }
-                catch (Exception ex)
-                {
-                    Log.Warn($"Could not read cloak_palette.json: {ex.Message}. Using defaults.");
+                    catch (Exception ex)
+                    {
+                        Log.Warn($"Could not read cloak_palette.json: {ex.Message}. Using defaults.");
+                    }
                 }
             }
+
+            CloakMaskManager.OnPaletteReloaded();
         }
 
         private static void ApplyDefaults()
@@ -176,6 +187,7 @@ namespace HornetCloakColor.Client
             HeroMeshRescanIntervalFrames = 30;
             DumpDiscoveredTextures = false;
             PerfDiagnostics = false;
+            UseCloakMaskTextures = false;
         }
 
         /// <summary>
@@ -223,6 +235,9 @@ namespace HornetCloakColor.Client
 
             if (TryExtractBool(trimmed, "perfDiagnostics", out var perf))
                 PerfDiagnostics = perf;
+
+            if (TryExtractBool(trimmed, "useCloakMaskTextures", out var useMasks))
+                UseCloakMaskTextures = useMasks;
 
             return true;
         }

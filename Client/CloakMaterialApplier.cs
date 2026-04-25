@@ -88,6 +88,8 @@ namespace HornetCloakColor.Client
                 // White preset = "no tint": disable the recolor pass and let the vanilla
                 // texture show through (prevents the cloak going off-white/grey).
                 mat.SetFloat(CloakShaderManager.StrengthId, 0f);
+                mat.SetTexture(CloakShaderManager.CloakMaskTexId, null);
+                mat.SetFloat(CloakShaderManager.UseCloakMaskTexId, 0f);
                 return;
             }
 
@@ -96,6 +98,19 @@ namespace HornetCloakColor.Client
             mat.SetFloat(CloakShaderManager.TargetSatId, s <= 0.001f ? 0f : 1.0f);
             mat.SetFloat(CloakShaderManager.TargetValId, Mathf.Lerp(0.6f, 1.4f, v));
             mat.SetFloat(CloakShaderManager.StrengthId, 1f);
+
+            if (CloakPaletteConfig.UseCloakMaskTextures && mat.mainTexture != null)
+            {
+                var collectionName = sprite?.Collection != null ? sprite.Collection.name : null;
+                var mask = CloakMaskManager.GetMaskForMainTexture(mat.mainTexture, collectionName, out var useMask);
+                mat.SetTexture(CloakShaderManager.CloakMaskTexId, mask);
+                mat.SetFloat(CloakShaderManager.UseCloakMaskTexId, useMask ? 1f : 0f);
+            }
+            else
+            {
+                mat.SetTexture(CloakShaderManager.CloakMaskTexId, null);
+                mat.SetFloat(CloakShaderManager.UseCloakMaskTexId, 0f);
+            }
         }
 
         private static void ApplyVertexTint(Material mat, tk2dSprite? sprite, CloakColor color)

@@ -16,9 +16,9 @@ namespace HornetCloakColor.Client
     /// rules as <see cref="CloakSceneScanner"/> plus whether it sits on the material's
     /// main-texture slot (what the cloak shader samples).
     ///
-    /// Writes under the plugin: <c>TextureDumps/Texture2D/&lt;Texture.name&gt;.png</c> (same
-    /// key as CustomizerT2D) and a copy per <c>tk2d</c> collection; <c>texture_dump_manifest.json</c>
-    /// in <c>TextureDumps</c>. No extra config — layout is fixed.
+    /// Writes under the plugin: <c>TextureDumps/&lt;tk2d collection name&gt;/&lt;Texture.name&gt;.png</c>
+    /// (same layout as <see cref="CloakMaskManager"/> masks under <c>CloakMasks/</c>) plus
+    /// <c>texture_dump_manifest.json</c> in <c>TextureDumps</c>.
     ///
     /// Disabled by default. Set <c>"dumpDiscoveredTextures": true</c> in
     /// <c>cloak_palette.json</c> to enable. Each distinct <see cref="Texture.GetInstanceID"/>
@@ -203,7 +203,7 @@ namespace HornetCloakColor.Client
             Texture2D? readable = null;
             try
             {
-                readable = MakeReadable(tex);
+                readable = TextureReadback.CopyToReadableTexture2D(tex);
                 if (readable == null)
                 {
                     Log.Warn($"[Dumper] Could not blit '{tex.name}' (id={id}, {tex.width}x{tex.height}) to a readable texture.");
@@ -220,22 +220,15 @@ namespace HornetCloakColor.Client
                 }
 
                 var fileName = BuildPackTexturePngFileName(tex, id);
-                var t2dDir = Path.Combine(dumpRoot, "Texture2D");
-                Directory.CreateDirectory(t2dDir);
-                var t2dPath = Path.Combine(t2dDir, fileName);
-                File.WriteAllBytes(t2dPath, bytes);
-                entry.PngFileName = Path.Combine("Texture2D", fileName);
-
-                var subKey = GetCollectionSubfolderKey(tk2dCollectionName);
+                var subKey = CloakDiskNames.CollectionFolder(tk2dCollectionName);
                 var collDir = Path.Combine(dumpRoot, subKey);
-                if (entry.CollectionSubfoldersWritten.Add(subKey))
-                {
-                    Directory.CreateDirectory(collDir);
-                    var collPath = Path.Combine(collDir, fileName);
-                    File.WriteAllBytes(collPath, bytes);
-                }
+                Directory.CreateDirectory(collDir);
+                var collPath = Path.Combine(collDir, fileName);
+                File.WriteAllBytes(collPath, bytes);
+                entry.PngFileName = Path.Combine(subKey, fileName);
+                entry.CollectionSubfoldersWritten.Add(subKey);
 
-                Log.Info($"[Dumper] Wrote {t2dPath} ({bytes.Length:N0} bytes).");
+                Log.Info($"[Dumper] Wrote {collPath} ({bytes.Length:N0} bytes).");
             }
             catch (Exception ex)
             {
@@ -251,7 +244,7 @@ namespace HornetCloakColor.Client
         private static void CopyTextureToCollectionIfNeeded(ManifestEntry entry, Texture tex, int id, string tk2dCollectionName)
         {
             if (string.IsNullOrEmpty(entry.PngFileName)) return;
-            var subKey = GetCollectionSubfolderKey(tk2dCollectionName);
+            var subKey = CloakDiskNames.CollectionFolder(tk2dCollectionName);
             if (!entry.CollectionSubfoldersWritten.Add(subKey)) return;
 
             var dumpRoot = EnsureDumpRootDir();
@@ -280,16 +273,13 @@ namespace HornetCloakColor.Client
 
         private static string BuildPackTexturePngFileName(Texture tex, int id)
         {
-            var baseName = SanitizeFileStem(tex.name);
+            var baseName = CloakDiskNames.SanitizeFileStem(tex.name ?? string.Empty);
             if (string.IsNullOrEmpty(baseName)) baseName = "tex";
             if (_pngBaseNameToTexId.TryGetValue(baseName, out var seenId) && seenId != id)
                 return $"{baseName}_id{id}.png";
             _pngBaseNameToTexId[baseName] = id;
             return baseName + ".png";
         }
-
-        private static string GetCollectionSubfolderKey(string? tk2dCollectionName) =>
-            string.IsNullOrWhiteSpace(tk2dCollectionName) ? "Uncategorized" : SanitizeDirName(tk2dCollectionName!);
 
         private static void FlushManifestIfDirty()
         {
@@ -326,7 +316,8 @@ namespace HornetCloakColor.Client
             sb.Append("    \"anyMainTextureSlotOnHero\": \"True if this texture is the Material.mainTexture on at least one scanned MeshRenderer under the player — the cloak shader recolors using that slot.\",\n");
             sb.Append("    \"heuristicLikelyCloakAtlas\": \"anyMainTextureSlotOnHero && sceneScanAllowlistMatch on at least one usage — strong signal; still verify visually from the PNG.\",\n");
             sb.Append("    \"falsePositiveHint\": \"Allowlist true on a sheet you consider non-cloak (e.g. weapon UI) — tighten JSON substrings.\",\n");
-            sb.Append("    \"falseNegativeHint\": \"Cloak sheet in PNG but allowlist never true — orphan detached sprites would not get scene-scanner tint until allowlist is fixed.\"\n");
+            sb.Append("    \"falseNegativeHint\": \"Cloak sheet in PNG but allowlist never true — orphan detached sprites would not get scene-scanner tint until allowlist is fixed.\",\n");
+            sb.Append("    \"dumpPngFileName\": \"Relative to TextureDumps: <collection>/<Texture.name>.png — mirrors CloakMasks layout.\"\n");
             sb.Append("  },\n");
             sb.Append("  \"textures\": [\n");
 
@@ -379,31 +370,6 @@ namespace HornetCloakColor.Client
             return sb.ToString();
         }
 
-        private static Texture2D? MakeReadable(Texture src)
-        {
-            var w = src.width;
-            var h = src.height;
-            if (w <= 0 || h <= 0) return null;
-
-            var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
-            var prev = RenderTexture.active;
-            try
-            {
-                Graphics.Blit(src, rt);
-                RenderTexture.active = rt;
-
-                var dst = new Texture2D(w, h, TextureFormat.RGBA32, mipChain: false);
-                dst.ReadPixels(new Rect(0, 0, w, h), 0, 0);
-                dst.Apply(updateMipmaps: false, makeNoLongerReadable: false);
-                return dst;
-            }
-            finally
-            {
-                RenderTexture.active = prev;
-                RenderTexture.ReleaseTemporary(rt);
-            }
-        }
-
         private static string? EnsureDumpRootDir()
         {
             if (_dumpRootDir != null) return _dumpRootDir;
@@ -425,21 +391,6 @@ namespace HornetCloakColor.Client
                 if (!_warnedDir) { Log.Warn($"[Dumper] Could not create dump folder: {ex.Message}"); _warnedDir = true; }
                 return null;
             }
-        }
-
-        private static string SanitizeFileStem(string? name)
-        {
-            if (string.IsNullOrEmpty(name)) return "tex";
-            var invalid = Path.GetInvalidFileNameChars();
-            return string.Join("_", name!.Split(invalid, StringSplitOptions.RemoveEmptyEntries));
-        }
-
-        private static string SanitizeDirName(string name)
-        {
-            var s = name.Trim();
-            if (s.Length == 0) return "Uncategorized";
-            var invalid = Path.GetInvalidFileNameChars();
-            return string.Join("_", s.Split(invalid, StringSplitOptions.RemoveEmptyEntries));
         }
 
         private static string JsonEscape(string s)
