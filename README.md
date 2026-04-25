@@ -10,7 +10,7 @@ Works **single-player out of the box**. If **[SSMP (Silksong Multiplayer)](https
 
 - Pick from 12 tasteful presets (Crimson, Scarlet, Amber, Gold, Emerald, Teal, Azure, Royal, Violet, Magenta, Obsidian, Ivory) or supply your own hex / RGB color.
 - **Cloak-only recolor**: a custom shader matches pixels to reference cloak colors (defaults ship **16** cloak refs + **10** avoid refs in `cloak_palette.json`) and recolors only cloak-like pixels. Edit `cloak_palette.json` next to the DLL to tune masking when an animation/atlas still looks wrong.
-- **Scene-wide coverage**: a separate scanner finds any sprite drawing a Hornet atlas (matched by texture name) anywhere in the scene, even renderers spawned outside the player hierarchy (e.g. steam-vent recoil pose, item-get pose), so animations don't pop back to red.
+- **Scene-wide coverage**: a separate scanner tints orphan `tk2dSprite`s that match substring lists in `cloak_palette.json` (collection / texture name / transform path), including poses outside the player hierarchy.
 - If the shader bundle isn't embedded, the mod falls back to tinting the whole character.
 - Zero-friction configuration through the BepInEx configuration manager (F1 in game).
 - **Works without SSMP** — runs in single-player and recolors your own cloak. SSMP is a soft dependency: install it to also synchronize cloak colors with other players.
@@ -59,8 +59,9 @@ not need to edit it.
   "matchRadius": 0.135,
   "avoidMatchRadius": 0.12,
   "debugLogging": false,
-  "sceneScanTextureContains": ["hornet"],
-  "sceneScanPathContains": ["hornet"],
+  "collectionNameContains": [],
+  "textureNameContains": [],
+  "transformPathContains": ["hornet"],
   "sceneScanIntervalFrames": 3
 }
 ```
@@ -82,16 +83,12 @@ not need to edit it.
 - `debugLogging`: when `true`, logs extra lines (e.g. each cloak color change, how many
   reference colors loaded, and which scene textures the scanner is matching/ignoring).
   Default `false`.
-- `sceneScanTextureContains`: substrings (case-insensitive) matched against the texture's
-  `.name`. Rarely useful on its own (Hornet's atlases are named `atlas0`/`atlas1`/…), but
-  any name match is also promoted into the texture-instance registry so future scans of
-  the same atlas hit the fast path.
-- `sceneScanPathContains`: substrings (case-insensitive) matched against the full
-  GameObject transform path. Rescues scene-specific poses (resting in bed, sitting at
-  things) whose atlas the active hero never renders directly. If a pose still shows red,
-  enable `debugLogging`, trigger the pose, and look for
-  `[Scanner] Ignored texture (no match): atlas0 … on '<path>'` lines — add a substring of
-  that path here.
+- `collectionNameContains`, `textureNameContains`, `transformPathContains`: the **only** way
+  the scene-wide orphan scanner matches sprites (OR between the three; within each list, OR
+  between substrings). `transformPathContains` defaults to `hornet` so many scene objects
+  still work; tune using `debugLogging` log lines (`collection=`, path). Silksong's runtime
+  `Texture.name` is often `atlas0`, so prefer collection or path substrings. There is no
+  texture registry or other fuzzy mode for the scanner.
 - `dumpDiscoveredTextures`: when `true`, the first time each Hornet atlas is recognized
   the mod writes a PNG of it to `BepInEx/plugins/HornetCloakColor/TextureDumps/`. Files are
   named `<texName>_id<InstanceID>_<width>x<height>_<source>.png` so you can correlate
@@ -133,30 +130,16 @@ A `thunderstore/dist/*.zip` is produced automatically alongside the compiled DLL
   that object (`GetComponentsInChildren`, including **inactive** children). Some animations use
   extra meshes or toggled child objects; only updating the root renderer missed those frames.
 - A scene-wide `CloakSceneScanner` runs on its own GameObject (DontDestroyOnLoad) at a high
-  script-execution order. Every few frames it iterates every `tk2dSprite` in the scene and
-  applies the local cloak color to any whose main texture matches Hornet. This catches
-  Hornet renderers spawned **outside** the player hierarchy (steam-vent recoil pose,
-  item-get pose, etc.) where `GetComponentsInChildren` can't reach. Renderers that already
-  have a `CloakRecolor` ancestor are skipped so per-player remote colors keep winning in
-  multiplayer.
-- "Matches Hornet" is decided in three stages:
-  1. **Texture instance registry** — every atlas the per-player `CloakRecolor` walks (which
-     is, by definition, a Hornet atlas) is recorded by its `Texture.GetInstanceID()`. The
-     scanner accepts any orphan sprite whose texture has the same instance ID. This is
-     reliable even though Silksong ships Hornet's atlases under the generic names
-     `atlas0`–`atlas3` (also used by many unrelated atlases — name-only filtering would
-     either miss them or recolor everything).
-  2. **Texture name filter** (`sceneScanTextureContains`) — substring match against
-     `Texture.name`. Useful when something Hornet-named exists outside any tk2dSprite
-     the hero has rendered yet.
-  3. **GameObject path filter** (`sceneScanPathContains`) — substring match against the
-     full transform path. Catches scene-specific poses (e.g. **resting in bed, sitting at
-     things**) whose atlas the active hero never renders directly, so the registry never
-     learns about it. The pose's GameObject typically still has "Hornet" somewhere in its
-     path, so the path filter rescues these.
-
-  When stage 2 or 3 matches, the texture is promoted into the registry so subsequent scans
-  hit the fast path.
+  script-execution order. Every few frames it iterates `tk2dSprite`s and applies the local
+  cloak pass when a sprite matches the **allowlist** in `cloak_palette.json` (case-insensitive
+  substrings on tk2d collection name, `Texture.name`, and/or the full transform path; OR
+  between those lists). It covers renderers **outside** the player hierarchy (steam-vent
+  recoil, item-get pose, etc.). `CloakRecolor` ancestors are skipped so remote players keep
+  their own colors. Orphans are **not** matched by the hero texture-ID registry (that exists
+  only to tag atlases for optional PNG dumps). To discover substrings, enable `debugLogging` or
+  use [Silksong AssetHelper](https://github.com/silksong-modding/Silksong.AssetHelper)
+  `DebugTools.DumpAllAssetNames` and search the output — bundle **asset** paths are not the same
+  as in-game `atlas0` names, and the AssetHelper in-repo test JSONs are not a player-atlas list.
 - **Sprite sheets / atlases:** Hornet’s art can live in multiple atlases (e.g. idle vs sprint).
   If a move still looks wrong, sample the cloak pixels from that atlas in an image editor and
   add or adjust hex values in `cloak_palette.json` / raise `matchRadius` slightly — the mod

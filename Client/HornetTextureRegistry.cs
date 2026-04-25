@@ -5,15 +5,10 @@ using UnityEngine;
 namespace HornetCloakColor.Client
 {
     /// <summary>
-    /// Set of <see cref="Texture.GetInstanceID"/> values for atlases we have seen used by a
-    /// known-Hornet renderer (i.e. one walked by <see cref="CloakRecolor"/> from inside the
-    /// hero hierarchy). The scene scanner uses this to decide whether an "orphan" sprite
-    /// elsewhere in the scene is also a Hornet sprite.
-    ///
-    /// Identifying Hornet atlases by name is unreliable because the game ships them as
-    /// <c>atlas0</c> / <c>atlas1</c> / <c>atlas2</c> / <c>atlas3</c> — names also used by
-    /// many non-Hornet sprite collections. Instance IDs uniquely identify the actual
-    /// atlas asset in memory, so this gives an exact match without false positives.
+    /// <see cref="Texture.GetInstanceID"/> values for atlases seen on the local hero
+    /// (<see cref="CloakRecolor"/>) for diagnostics / <see cref="TextureDumper"/>.
+    /// <see cref="CloakSceneScanner"/> no longer uses this; orphan sprites match only
+    /// <c>cloak_palette.json</c> allowlist substrings.
     /// </summary>
     internal static class HornetTextureRegistry
     {

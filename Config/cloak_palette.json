@@ -1,5 +1,5 @@
 {
-  "_comment": "Cloak: up to 16 reference colors. Texels close to ANY get recolored. Avoid: up to 16 colors (skin, metal, etc.) — texels close to ANY get the recolor mask reduced so they stay vanilla.",
+  "_comment": "Cloak shader: up to 16 reference colors (texels near any are recolored). avoidColors: up to 16 — mask reduced so skin/metal stay vanilla.",
   "cloakColors": [
     "#79404b",
     "#d4b8b8",
@@ -37,33 +37,22 @@
   "avoidMatchRadius": 0.020,
 
   "debugLogging": false,
-  "_comment_mapIcon": "When true, logs SSMP compass/map-icon broadcast, server late-join replay, and deferred remote icon creation (set without enabling debugLogging to avoid cloak scanner noise).",
+  "_comment_mapIcon": "When true, logs SSMP compass/map-icon sync (without cloak scanner noise unless debugLogging is on).",
   "mapIconDebugLogging": false,
 
-  "_comment2": "Scene-wide scanner. A sprite is considered Hornet if (a) its texture instance was already seen on a hero renderer (registry), or (b) its texture name contains one of sceneScanTextureContains, or (c) its full GameObject path contains one of sceneScanPathContains. Path matching catches scene-specific poses (resting in bed, sitting at things) whose atlas the active hero never renders directly. Set debugLogging=true to see which sprites get matched/ignored and on which path.",
-  "sceneScanTextureContains": ["hornet"],
-  "sceneScanPathContains": ["hornet"],
+  "_comment_scanner": "CloakSceneScanner (orphan tk2d sprites only): an orphan matches if at least one non-empty list has a case-insensitive substring hit — OR between collectionNameContains (tk2d collection name), textureNameContains (Texture.name, often atlas0), transformPathContains (full GameObject path). Silksong.AssetHelper does not publish a full Hornet player atlas list; use DebugTools.DumpAllAssetNames / bundle asset dumps and grep, or run with debugLogging to log collection= / paths, then add substrings here. No registry or other heuristics.",
+  "collectionNameContains": [],
+  "textureNameContains": [],
+  "transformPathContains": ["hornet"],
+
   "sceneScanIntervalFrames": 3,
 
-  "_comment_registryDeny": "When (a) alone would match, paths containing any of these substrings are skipped — shared atlas0 IDs also appear on VFX/HUD/sprite-cache tk2d sprites.",
-  "sceneScanRegistryDenyPathContains": [
-    "SpriteCache",
-    "EnemyHitEffects",
-    "Slash Impact",
-    "Hero Dash Puff",
-    "Land Effect",
-    "/HudCamera/",
-    "Thunk",
-    "Warrior Rage",
-    "Barbed Wire"
-  ],
-
-  "_comment_heroMesh": "CloakRecolor re-scans the player hierarchy for MeshRenderers every N frames (material tint still applies every LateUpdate). 1 = full scan every frame.",
+  "_comment_heroMesh": "CloakRecolor re-scans the player MeshRenderer list every N frames; material re-apply is still every LateUpdate.",
   "heroMeshRescanIntervalFrames": 30,
 
-  "_comment3": "Diagnostic: when true, the first time we see each Hornet atlas we dump it as a PNG to BepInEx/plugins/HornetCloakColor/TextureDumps/ so you can correlate runtime InstanceIDs with actual sprite sheets. Off by default; turn on when you need to identify a texture, then turn off again.",
+  "_comment_dump": "First time an atlas is registered from the hero hierarchy, dump PNG to BepInEx/plugins/HornetCloakColor/TextureDumps/ when true.",
   "dumpDiscoveredTextures": false,
 
-  "_comment_perf": "When true, logs aggregated [HCC/Perf] lines every ~2s: CloakRecolor LateUpdate cost (scales with player count in MP), CloakSceneScanner FindObjects+loop, and SyncRemoteMapIconsVisible call rate. Turn off after profiling.",
+  "_comment_perf": "Aggregated [HCC/Perf] lines every ~2s when true.",
   "perfDiagnostics": false
 }

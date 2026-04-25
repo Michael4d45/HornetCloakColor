@@ -5,9 +5,9 @@ using HornetCloakColor.Shared;
 namespace HornetCloakColor.Client
 {
     /// <summary>
-    /// BepInEx configuration for the local player's cloak color. Cloak *matching* (which texture
-    /// pixels count as the cloak) is driven by <c>cloak_palette.json</c> next to the DLL, not
-    /// by these settings.
+    /// BepInEx configuration for the local player's cloak color. Cloak *matching* (which
+    /// pixels count as cloak, and which orphan sprites the scene scanner tints) is driven by
+    /// <c>cloak_palette.json</c> next to the DLL, not by these settings.
     /// </summary>
     internal class CloakColorConfig
     {

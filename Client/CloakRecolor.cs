@@ -12,8 +12,8 @@ namespace HornetCloakColor.Client
     /// touching the root missed those frames.
     ///
     /// This component owns the renderers in its own hierarchy. <see cref="CloakSceneScanner"/>
-    /// then handles "orphan" Hornet renderers that the engine spawns elsewhere in the scene
-    /// (steam-vent recoil pose, item-get pose, etc.).
+    /// applies the same cloak treatment to orphan <c>tk2dSprite</c>s that match the
+    /// allowlist in <c>cloak_palette.json</c> (separate from this hierarchy).
     ///
     /// Mesh renderers are cached and the hierarchy is re-scanned every
     /// <see cref="CloakPaletteConfig.HeroMeshRescanIntervalFrames"/> (default 30) instead of every frame,

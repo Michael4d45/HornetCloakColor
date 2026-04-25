@@ -32,7 +32,7 @@ namespace HornetCloakColor.Client
         /// Dump <paramref name="tex"/> to disk if it's a Texture2D, dumping is enabled,
         /// and we haven't already dumped this instance ID.
         /// </summary>
-        /// <param name="source">Short tag for where we found it (e.g. "hero", "scanner-path").</param>
+        /// <param name="source">Short tag for where we found it (e.g. "hero").</param>
         public static void TryDump(Texture? tex, string source)
         {
             if (!CloakPaletteConfig.DumpDiscoveredTextures) return;
