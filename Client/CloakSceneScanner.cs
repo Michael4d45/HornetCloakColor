@@ -9,8 +9,8 @@ namespace HornetCloakColor.Client
 {
     /// <summary>
     /// Scene-wide fallback: tints orphan <see cref="tk2dSprite"/>s that match
-    /// <see cref="CloakPaletteConfig.MatchesSceneScanAllowlist"/> (collection / texture name /
-    /// transform path substrings in <c>cloak_palette.json</c>).
+    /// <see cref="CloakPaletteConfig.MatchesSceneScanAllowlist"/> (tk2d collection name substrings
+    /// in <c>cloak_palette.json</c>).
     ///
     /// Catches renderers spawned <i>outside</i> <see cref="HeroController"/>'s hierarchy
     /// (e.g. steam-vent recoil, item-get pose).
@@ -116,10 +116,10 @@ namespace HornetCloakColor.Client
                     continue;
 
                 var texName = tex.name;
-                var path = GetPath(renderer.transform);
+                var path = FormatTransformPath(renderer.transform);
                 var collectionName = sprite.Collection != null ? (sprite.Collection.name ?? string.Empty) : string.Empty;
 
-                if (!CloakPaletteConfig.MatchesSceneScanAllowlist(collectionName, texName, path))
+                if (!CloakPaletteConfig.MatchesSceneScanAllowlist(collectionName))
                 {
                     if (CloakPaletteConfig.DebugLogging && _loggedTextureIds.Add(tex.GetInstanceID()))
                     {
@@ -154,7 +154,8 @@ namespace HornetCloakColor.Client
             return t.name.StartsWith("Compass Icon", StringComparison.Ordinal);
         }
 
-        private static string GetPath(Transform t)
+        /// <summary>Hierarchy path like <c>Root/Child/Leaf</c> for logging and dump manifests.</summary>
+        internal static string FormatTransformPath(Transform? t)
         {
             if (t == null) return "(null)";
             var sb = new StringBuilder();

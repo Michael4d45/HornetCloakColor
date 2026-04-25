@@ -60,8 +60,6 @@ not need to edit it.
   "avoidMatchRadius": 0.12,
   "debugLogging": false,
   "collectionNameContains": [],
-  "textureNameContains": [],
-  "transformPathContains": ["hornet"],
   "sceneScanIntervalFrames": 3
 }
 ```
@@ -83,18 +81,15 @@ not need to edit it.
 - `debugLogging`: when `true`, logs extra lines (e.g. each cloak color change, how many
   reference colors loaded, and which scene textures the scanner is matching/ignoring).
   Default `false`.
-- `collectionNameContains`, `textureNameContains`, `transformPathContains`: the **only** way
-  the scene-wide orphan scanner matches sprites (OR between the three; within each list, OR
-  between substrings). `transformPathContains` defaults to `hornet` so many scene objects
-  still work; tune using `debugLogging` log lines (`collection=`, path). Silksong's runtime
-  `Texture.name` is often `atlas0`, so prefer collection or path substrings. There is no
-  texture registry or other fuzzy mode for the scanner.
-- `dumpDiscoveredTextures`: when `true`, the first time each Hornet atlas is recognized
-  the mod writes a PNG of it to `BepInEx/plugins/HornetCloakColor/TextureDumps/`. Files are
-  named `<texName>_id<InstanceID>_<width>x<height>_<source>.png` so you can correlate
-  runtime instance IDs (from the `[Registry]` / `[Scanner]` log lines) with actual sprite
-  sheets, and sample colors to add to `cloakColors`. Default `false` — turn on
-  temporarily, capture the textures you care about, then turn off again.
+- `collectionNameContains`: the **only** way the scene-wide orphan scanner matches sprites
+  (OR between substrings against `tk2dSprite.Collection.name`). Tune using `debugLogging`
+  log lines (`collection=`). There is no texture registry or other fuzzy mode for the scanner.
+- `dumpDiscoveredTextures`: when `true`, each distinct runtime texture (once per
+  `InstanceID`) is written under `BepInEx/plugins/HornetCloakColor/TextureDumps/` as
+  `Texture2D/<Texture.name>.png` (same naming as CustomizerT2D), copies under each
+  `tk2d` collection subfolder (e.g. `Hornet Cln/`) when known, plus
+  `texture_dump_manifest.json` in `TextureDumps/`. No layout options. Default `false` — turn
+  on temporarily, then turn off again.
 - `sceneScanIntervalFrames`: how often (in frames) the scanner walks every `tk2dSprite`
   in the scene. `1` = every frame; `3` is a good default. Higher = cheaper but slightly
   slower to color newly-spawned poses.

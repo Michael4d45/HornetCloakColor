@@ -70,19 +70,9 @@ namespace HornetCloakColor.Client
 
         /// <summary>
         /// <see cref="CloakSceneScanner"/> only: substrings (case-insensitive) against
-        /// <c>tk2dSprite.Collection.name</c>. Empty array does not contribute to the OR.
+        /// <c>tk2dSprite.Collection.name</c>.
         /// </summary>
         public static string[] CollectionNameContains { get; private set; } = Array.Empty<string>();
-
-        /// <summary>
-        /// <see cref="CloakSceneScanner"/> only: substrings against <see cref="Texture.name"/>.
-        /// </summary>
-        public static string[] TextureNameContains { get; private set; } = Array.Empty<string>();
-
-        /// <summary>
-        /// <see cref="CloakSceneScanner"/> only: substrings against the full transform path.
-        /// </summary>
-        public static string[] TransformPathContains { get; private set; } = Array.Empty<string>();
 
         /// <summary>
         /// How often <see cref="CloakRecolor"/> re-runs <c>GetComponentsInChildren</c> for <see cref="MeshRenderer"/> to
@@ -92,41 +82,28 @@ namespace HornetCloakColor.Client
         public static int HeroMeshRescanIntervalFrames { get; private set; }
 
         /// <summary>
-        /// When true, the first time the mod sees each Hornet atlas it dumps a PNG to
-        /// <c>BepInEx/plugins/HornetCloakColor/TextureDumps/</c>. Useful for figuring out
-        /// which sprite sheet maps to a runtime <c>InstanceID</c> and for sampling colors
-        /// to add to <c>cloakColors</c>. Default: false (cheap), turn on temporarily.
+        /// When true, walks every texture slot on each player <see cref="MeshRenderer"/>
+        /// shared material, dumps each distinct atlas as PNG under <c>TextureDumps</c> (see
+        /// <see cref="TextureDumper"/> for layout) and maintains
+        /// <c>texture_dump_manifest.json</c> with allowlist vs main-texture-slot
+        /// flags for tuning false positives / false negatives. Default: false (cheap), turn on temporarily.
         /// </summary>
         public static bool DumpDiscoveredTextures { get; private set; }
 
         /// <summary>
         /// True if <see cref="CloakSceneScanner"/> has no allowlist entries (orphan sprites
-        /// will never match — add substrings to the three *Contains arrays in the JSON).
+        /// will never match — add substrings to <c>collectionNameContains</c> in the JSON).
         /// </summary>
-        public static bool SceneScanAllowlistEmpty =>
-            CollectionNameContains.Length == 0
-            && TextureNameContains.Length == 0
-            && TransformPathContains.Length == 0;
+        public static bool SceneScanAllowlistEmpty => CollectionNameContains.Length == 0;
 
         /// <summary>
-        /// <see cref="CloakSceneScanner"/>: at least one non-empty list must have a substring
-        /// match (OR between the three channels; within a channel, OR between listed substrings).
+        /// <see cref="CloakSceneScanner"/>: <c>tk2dSprite.Collection.name</c> must match at least
+        /// one substring (OR between listed substrings).
         /// </summary>
-        public static bool MatchesSceneScanAllowlist(string collectionName, string textureName, string transformPath)
+        public static bool MatchesSceneScanAllowlist(string collectionName)
         {
-            if (CollectionNameContains.Length > 0
-                && MatchesAnyFilter(collectionName, CollectionNameContains))
-                return true;
-
-            if (TextureNameContains.Length > 0
-                && MatchesAnyFilter(textureName, TextureNameContains))
-                return true;
-
-            if (TransformPathContains.Length > 0
-                && MatchesAnyFilter(transformPath, TransformPathContains))
-                return true;
-
-            return false;
+            return CollectionNameContains.Length > 0
+                && MatchesAnyFilter(collectionName, CollectionNameContains);
         }
 
         private static bool MatchesAnyFilter(string name, string[] filters)
@@ -155,9 +132,9 @@ namespace HornetCloakColor.Client
                     var json = File.ReadAllText(diskPath);
                     if (TryApplyPaletteJson(json))
                     {
-                        var allow = $"{CollectionNameContains.Length} collection / {TextureNameContains.Length} texture / {TransformPathContains.Length} path allowlist substring(s)";
+                        var allow = $"{CollectionNameContains.Length} collection allowlist substring(s)";
                         if (SceneScanAllowlistEmpty)
-                            Log.Warn($"Loaded cloak palette from {diskPath} ({SrcCount} cloak / {AvoidCount} avoid). Scene scan allowlist is empty — orphan Hornet sprites will not be tinted; fill collectionNameContains, textureNameContains, or transformPathContains.");
+                            Log.Warn($"Loaded cloak palette from {diskPath} ({SrcCount} cloak / {AvoidCount} avoid). Scene scan allowlist is empty — orphan Hornet sprites will not be tinted; fill collectionNameContains.");
                         else
                             Log.Info($"Loaded cloak palette from {diskPath} ({SrcCount} cloak / {AvoidCount} avoid; {allow}).");
                         if (MapIconDebugLogging)
@@ -189,9 +166,12 @@ namespace HornetCloakColor.Client
             AvoidMatchRadius = 0.120f;
             DebugLogging = false;
             MapIconDebugLogging = false;
-            CollectionNameContains = Array.Empty<string>();
-            TextureNameContains = Array.Empty<string>();
-            TransformPathContains = new[] { "hornet" };
+            CollectionNameContains = new[]
+            {
+                "Hornet Cln", "Hornet Cloakless", "Hornet CrestWeapon", "Hornet Heart Grab",
+                "Hornet Revenge Crystal", "Hornet Strung Up", "Hornet_Needolin", "Slab Cloak Scene",
+                "Crest Get Cln", "Phantom Cln",
+            };
             SceneScanIntervalFrames = 3;
             HeroMeshRescanIntervalFrames = 30;
             DumpDiscoveredTextures = false;
@@ -231,14 +211,6 @@ namespace HornetCloakColor.Client
             var collectionPaths = ExtractStringArray(trimmed, "collectionNameContains");
             if (collectionPaths.Count > 0)
                 CollectionNameContains = collectionPaths.ToArray();
-
-            var textureNamePaths = ExtractStringArray(trimmed, "textureNameContains");
-            if (textureNamePaths.Count > 0)
-                TextureNameContains = textureNamePaths.ToArray();
-
-            var transformPathPaths = ExtractStringArray(trimmed, "transformPathContains");
-            if (transformPathPaths.Count > 0)
-                TransformPathContains = transformPathPaths.ToArray();
 
             if (TryExtractInt(trimmed, "sceneScanIntervalFrames", out var iv) && iv > 0 && iv <= 240)
                 SceneScanIntervalFrames = iv;

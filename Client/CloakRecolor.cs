@@ -113,13 +113,7 @@ namespace HornetCloakColor.Client
                 if (IsUnderSsmpUsernameObject(meshRenderer.transform))
                     continue;
 
-                var shared = meshRenderer.sharedMaterial;
-                if (shared != null)
-                {
-                    var heroTex = shared.mainTexture;
-                    if (HornetTextureRegistry.Register(heroTex))
-                        TextureDumper.TryDump(heroTex, "hero");
-                }
+                TextureDumper.CollectHeroHierarchyTextures(meshRenderer);
 
                 CloakMaterialApplier.Apply(
                     meshRenderer,
