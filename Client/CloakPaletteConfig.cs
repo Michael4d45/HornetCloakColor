@@ -63,8 +63,9 @@ namespace HornetCloakColor.Client
         public static bool PerfDiagnostics { get; private set; }
 
         /// <summary>
-        /// How often (in frames) the scene scanner walks every tk2dSprite. 1 = every frame,
-        /// 3 is a good default. Higher = cheaper but slightly slower to color new sprites.
+        /// How often (in frames) <see cref="CloakSceneScanner"/> runs <c>FindObjectsByType</c> to
+        /// refresh its orphan-renderer cache. Tint <see cref="CloakMaterialApplier.Apply"/> runs every
+        /// <c>LateUpdate</c> on cached renderers, so values &gt; 1 save work without the old flicker.
         /// </summary>
         public static int SceneScanIntervalFrames { get; private set; }
 

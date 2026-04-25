@@ -15,6 +15,11 @@ namespace HornetCloakColor.Client
     /// Catches renderers spawned <i>outside</i> <see cref="HeroController"/>'s hierarchy
     /// (e.g. steam-vent recoil, item-get pose).
     ///
+    /// <see cref="CloakPaletteConfig.SceneScanIntervalFrames"/> controls how often we run
+    /// <c>FindObjectsByType</c> to refresh the orphan set; <see cref="CloakMaterialApplier.Apply"/>
+    /// runs <b>every</b> <c>LateUpdate</c> on that cache so tk2d material resets (FX, HUD) do not
+    /// flicker between scans.
+    ///
     /// Runs late (high <see cref="DefaultExecutionOrderAttribute"/>) so it executes after
     /// tk2d's LateUpdate.
     /// </summary>
@@ -29,6 +34,9 @@ namespace HornetCloakColor.Client
 
         private readonly HashSet<int> _loggedTextureIds = new();
         private readonly HashSet<int> _loggedRendererIds = new();
+
+        private readonly List<MeshRenderer> _orphanCache = new();
+        private readonly HashSet<MeshRenderer> _rebuildDedup = new();
 
         private int _frameCounter;
 
@@ -48,11 +56,18 @@ namespace HornetCloakColor.Client
 
         private void LateUpdate()
         {
-            var interval = Math.Max(1, CloakPaletteConfig.SceneScanIntervalFrames);
-            if ((_frameCounter++ % interval) != 0) return;
-
             CloakMaterialApplier.PruneDestroyed(_originalShaderByRenderer);
 
+            var interval = Math.Max(1, CloakPaletteConfig.SceneScanIntervalFrames);
+            if ((_frameCounter++ % interval) == 0)
+                RunFullSceneScan();
+
+            ApplyOrphanCache();
+        }
+
+        /// <summary>Walks every <see cref="tk2dSprite"/> and rebuilds <see cref="_orphanCache"/>.</summary>
+        private void RunFullSceneScan()
+        {
             double findMs;
             tk2dSprite[] sprites;
             if (PerfDiagnostics.Enabled)
@@ -70,30 +85,38 @@ namespace HornetCloakColor.Client
 
             if (sprites == null || sprites.Length == 0)
             {
+                _orphanCache.Clear();
+                _rebuildDedup.Clear();
                 if (PerfDiagnostics.Enabled)
                     PerfDiagnostics.RecordSceneScan(0, 0, findMs, 0);
                 return;
             }
 
-            int applied;
+            int cacheSize;
             double loopMs;
             if (PerfDiagnostics.Enabled)
             {
                 var swLoop = Stopwatch.StartNew();
-                applied = RunScanLoop(sprites);
+                cacheSize = RebuildOrphanCache(sprites);
                 swLoop.Stop();
                 loopMs = swLoop.Elapsed.TotalMilliseconds;
-                PerfDiagnostics.RecordSceneScan(sprites.Length, applied, findMs, loopMs);
+                PerfDiagnostics.RecordSceneScan(sprites.Length, cacheSize, findMs, loopMs);
             }
             else
             {
-                _ = RunScanLoop(sprites);
+                _ = RebuildOrphanCache(sprites);
             }
         }
 
-        private int RunScanLoop(tk2dSprite[] sprites)
+        /// <summary>Returns number of distinct <see cref="MeshRenderer"/>s added to the cache.</summary>
+        private int RebuildOrphanCache(tk2dSprite[] sprites)
         {
-            var applied = 0;
+            _orphanCache.Clear();
+            _rebuildDedup.Clear();
+
+            if (CloakPaletteConfig.SceneScanAllowlistEmpty)
+                return 0;
+
             foreach (var sprite in sprites)
             {
                 if (sprite == null) continue;
@@ -112,9 +135,6 @@ namespace HornetCloakColor.Client
                 if (IsCompassIcon(renderer.transform))
                     continue;
 
-                if (CloakPaletteConfig.SceneScanAllowlistEmpty)
-                    continue;
-
                 var texName = tex.name;
                 var path = FormatTransformPath(renderer.transform);
                 var collectionName = sprite.Collection != null ? (sprite.Collection.name ?? string.Empty) : string.Empty;
@@ -130,10 +150,70 @@ namespace HornetCloakColor.Client
                     continue;
                 }
 
+                if (!_rebuildDedup.Add(renderer))
+                    continue;
+
                 if (CloakPaletteConfig.DebugLogging && _loggedRendererIds.Add(renderer.GetInstanceID()))
                 {
                     Log.Info($"[Scanner] Tinting orphan renderer '{path}' " +
                              $"(tex={texName}, collection='{collectionName}', id={tex.GetInstanceID()})");
+                }
+
+                _orphanCache.Add(renderer);
+            }
+
+            _rebuildDedup.Clear();
+            return _orphanCache.Count;
+        }
+
+        private void ApplyOrphanCache()
+        {
+            if (_orphanCache.Count == 0) return;
+
+            for (var i = _orphanCache.Count - 1; i >= 0; i--)
+            {
+                var renderer = _orphanCache[i];
+                if (renderer == null)
+                {
+                    _orphanCache.RemoveAt(i);
+                    continue;
+                }
+
+                if (renderer.GetComponentInParent<CloakRecolor>() != null)
+                {
+                    _orphanCache.RemoveAt(i);
+                    continue;
+                }
+
+                if (IsCompassIcon(renderer.transform))
+                {
+                    _orphanCache.RemoveAt(i);
+                    continue;
+                }
+
+                var sprite = renderer.GetComponent<tk2dSprite>();
+                var shared = renderer.sharedMaterial;
+                if (shared == null)
+                {
+                    _orphanCache.RemoveAt(i);
+                    continue;
+                }
+
+                if (shared.mainTexture == null)
+                {
+                    _orphanCache.RemoveAt(i);
+                    continue;
+                }
+
+                var collectionName = sprite != null && sprite.Collection != null
+                    ? (sprite.Collection.name ?? string.Empty)
+                    : string.Empty;
+
+                if (CloakPaletteConfig.SceneScanAllowlistEmpty
+                    || !CloakPaletteConfig.MatchesSceneScanAllowlist(collectionName))
+                {
+                    _orphanCache.RemoveAt(i);
+                    continue;
                 }
 
                 CloakMaterialApplier.Apply(
@@ -142,10 +222,7 @@ namespace HornetCloakColor.Client
                     _color,
                     useCloakShader: true,
                     _originalShaderByRenderer);
-                applied++;
             }
-
-            return applied;
         }
 
         private static bool IsCompassIcon(Transform t)

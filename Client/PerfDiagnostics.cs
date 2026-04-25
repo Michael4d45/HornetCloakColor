@@ -53,8 +53,9 @@ namespace HornetCloakColor.Client
             MaybeFlushWindow();
         }
 
-        /// <summary>Call from <see cref="CloakSceneScanner"/> once per scan pass.</summary>
-        public static void RecordSceneScan(int tk2dSpriteCount, int appliedCount, double findObjectsMs, double loopMs)
+        /// <summary>Call from <see cref="CloakSceneScanner"/> once per full scan (FindObjects + cache rebuild).</summary>
+        /// <param name="orphanCacheSize">Distinct orphan <see cref="MeshRenderer"/> count after rebuild.</param>
+        public static void RecordSceneScan(int tk2dSpriteCount, int orphanCacheSize, double findObjectsMs, double loopMs)
         {
             if (!Enabled) return;
 
@@ -62,7 +63,7 @@ namespace HornetCloakColor.Client
             _scannerSpritesTotal += tk2dSpriteCount;
             if (tk2dSpriteCount > _scannerSpritesMax)
                 _scannerSpritesMax = tk2dSpriteCount;
-            _scannerAppliedTotal += appliedCount;
+            _scannerAppliedTotal += orphanCacheSize;
             _scannerFindMsTotal += findObjectsMs;
             _scannerLoopMsTotal += loopMs;
 
@@ -131,13 +132,13 @@ namespace HornetCloakColor.Client
             if (_scannerRuns > 0)
             {
                 var avgSprites = (double)_scannerSpritesTotal / _scannerRuns;
-                var avgApplied = (double)_scannerAppliedTotal / _scannerRuns;
+                var avgCache = (double)_scannerAppliedTotal / _scannerRuns;
                 var avgFind = _scannerFindMsTotal / _scannerRuns;
                 var avgLoop = _scannerLoopMsTotal / _scannerRuns;
                 Log.Info(
-                    $"[HCC/Perf] CloakSceneScanner: {_scannerRuns} scan(s) — tk2dSprite count avg {avgSprites:F0}, max in one pass {_scannerSpritesMax}, " +
-                    $"Apply() calls avg {avgApplied:F1}, FindObjects {avgFind:F2}ms/scan, loop+Apply {avgLoop:F2}ms/scan " +
-                    $"(MP adds sprites ⇒ larger FindObjects + longer loop).");
+                    $"[HCC/Perf] CloakSceneScanner: {_scannerRuns} full scan(s) — tk2dSprite count avg {avgSprites:F0}, max in one pass {_scannerSpritesMax}, " +
+                    $"orphan cache size avg {avgCache:F1}, FindObjects {avgFind:F2}ms/scan, rebuild {avgLoop:F2}ms/scan " +
+                    $"(per-frame Apply runs on cache separately).");
             }
 
             if (_mapSyncCalls > 0)

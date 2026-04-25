@@ -90,9 +90,10 @@ not need to edit it.
   `tk2d` collection subfolder (e.g. `Hornet Cln/`) when known, plus
   `texture_dump_manifest.json` in `TextureDumps/`. No layout options. Default `false` — turn
   on temporarily, then turn off again.
-- `sceneScanIntervalFrames`: how often (in frames) the scanner walks every `tk2dSprite`
-  in the scene. `1` = every frame; `3` is a good default. Higher = cheaper but slightly
-  slower to color newly-spawned poses.
+- `sceneScanIntervalFrames`: how often (in frames) the scanner runs `FindObjectsByType`
+  to refresh its cache of orphan renderers. Tint is still applied **every** `LateUpdate` to
+  that cache (so FX/HUD do not flicker when tk2d resets materials). `1` = rescan every frame;
+  `3` is a good default. Higher = cheaper; new orphans may take up to N−1 frames to join the cache.
 
 If the file is missing or invalid, the built-in defaults are used.
 

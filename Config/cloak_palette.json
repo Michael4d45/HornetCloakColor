@@ -94,6 +94,7 @@
     "Wood Witch Cln",
     "Wraith Cln"
   ],
+  "_comment_scanInterval": "FindObjects refresh rate only; orphan tint still applies every LateUpdate to the cache.",
   "sceneScanIntervalFrames": 3,
 
   "_comment_heroMesh": "CloakRecolor re-scans the player MeshRenderer list every N frames; material re-apply is still every LateUpdate.",
