@@ -1,5 +1,5 @@
 {
-  "_comment": "Cloak shader: up to 16 reference colors (texels near any are recolored). avoidColors: up to 16 — mask reduced so skin/metal stay vanilla.",
+  "_comment": "Runtime recolor uses R masks only (CloakMasks/…, GPU-baked via CloakMaskBake when missing). cloakColors + avoidColors + radii define that bake (same as before); rebuild Resources/cloakshader.bundle with CloakHueShift + CloakMaskBake (Shaders/README.md).",
   "cloakColors": [
     "#79404b",
     "#d4b8b8",
@@ -35,9 +35,6 @@
   "matchRadius": 0.175,
   "_comment_avoidRadius": "Optional; if omitted, defaults to matchRadius. Same 0.02–1.0 range as matchRadius.",
   "avoidMatchRadius": 0.020,
-
-  "_comment_useCloakMaskTextures": "When true, R masks live in CloakMasks/<tk2d collection>/<MainTex.name>.png. Missing PNGs are GPU-baked (CloakMaskBake.shader, same math as in-game). Rebuild Resources/cloakshader.bundle with BOTH CloakHueShift + CloakMaskBake (Shaders/README.md). Delete old black PNGs after rebundling.",
-  "useCloakMaskTextures": true,
 
   "debugLogging": false,
   "_comment_mapIcon": "When true, logs SSMP compass/map-icon sync (without cloak scanner noise unless debugLogging is on).",

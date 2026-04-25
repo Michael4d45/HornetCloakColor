@@ -136,15 +136,13 @@ A `thunderstore/dist/*.zip` is produced automatically alongside the compiled DLL
   `DebugTools.DumpAllAssetNames` and search the output — bundle **asset** paths are not the same
   as in-game `atlas0` names, and the AssetHelper in-repo test JSONs are not a player-atlas list.
 - **Sprite sheets / atlases:** Hornet’s art can live in multiple atlases (e.g. idle vs sprint).
-  If a move still looks wrong, sample the cloak pixels from that atlas in an image editor and
-  add or adjust hex values in `cloak_palette.json` / raise `matchRadius` slightly — the mod
-  matches by RGB distance to your reference colors, so different bakes may need tuning.
+  Recolor weights live in **`CloakMasks/<collection>/<atlas>.png`** (R channel). If a sheet still
+  looks wrong, edit that PNG or tune **`cloak_palette.json`** (`cloakColors`, `avoidColors`,
+  `matchRadius`) and **re-bake** missing masks (GPU `CloakMaskBake` uses those fields; see
+  `Shaders/README.md`).
 - **Cloak shader path** swaps the renderer's shader for `HornetCloakColor/CloakHueShift` and
-  pushes the chosen color in HSV. The shader measures RGB distance from each texel to up to
-  **16** cloak reference colors (from `cloak_palette.json`), takes the minimum, and smoothsteps it
-  into a mask. Optionally, distance to up to **16** avoid colors reduces that mask so non-cloak
-  pixels are not recolored. It then replaces hue/saturation while preserving value for shading.
-  The shader is shipped as an `AssetBundle` embedded in the DLL.
+  pushes the chosen tint in HSV. The fragment shader reads **only** the R mask texture (no
+  per-pixel RGB matching at draw time). The shader is shipped as an `AssetBundle` embedded in the DLL.
 - **Fallback** (when the shader bundle isn't present) tints the whole character via the
   `tk2dSprite` vertex color and the `MeshRenderer` material color.
 - Color updates are serialized as a 5-byte packet (player ID + RGB) and sent through the
@@ -152,9 +150,9 @@ A `thunderstore/dist/*.zip` is produced automatically alongside the compiled DLL
 - The server keeps a simple in-memory table of `playerId -> CloakColor` and replays it to any
   new joiner so late arrivals see correct colors immediately.
 
-## Shipped `CloakMasks/` (optional texture masks)
+## Shipped `CloakMasks/`
 
-The repo includes **`CloakMasks/<tk2d collection>/<atlas>.png`** next to the project root (same paths the mod uses under `BepInEx/plugins/HornetCloakColor/`). These files are **version-controlled**, copied into the build output with the DLL, and included in Thunderstore zips. Update them in the repo when you tune masks; the game can still overwrite or add files at runtime when `useCloakMaskTextures` is enabled.
+The repo includes **`CloakMasks/<tk2d collection>/<atlas>.png`** next to the project root (same paths the mod uses under `BepInEx/plugins/HornetCloakColor/`). These files are **version-controlled**, copied into the build output with the DLL, and included in Thunderstore zips. Update them in the repo when you tune masks; the game can still write new PNGs next to the DLL when an atlas has no mask yet (GPU bake from `cloak_palette.json`).
 
 ## Baking the shader bundle
 

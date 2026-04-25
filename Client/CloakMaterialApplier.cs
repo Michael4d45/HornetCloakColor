@@ -78,18 +78,12 @@ namespace HornetCloakColor.Client
             if (sprite != null && sprite.color != Color.white)
                 sprite.color = Color.white;
 
-            mat.SetVectorArray(CloakShaderManager.SrcColorsId, CloakPaletteConfig.SrcColors);
-            mat.SetVectorArray(CloakShaderManager.AvoidColorsId, CloakPaletteConfig.AvoidColors);
-            mat.SetFloat(CloakShaderManager.MatchRadiusId, CloakPaletteConfig.MatchRadius);
-            mat.SetFloat(CloakShaderManager.AvoidMatchRadiusId, CloakPaletteConfig.AvoidMatchRadius);
-
             if (color.Equals(CloakColor.Default))
             {
                 // White preset = "no tint": disable the recolor pass and let the vanilla
                 // texture show through (prevents the cloak going off-white/grey).
                 mat.SetFloat(CloakShaderManager.StrengthId, 0f);
-                mat.SetTexture(CloakShaderManager.CloakMaskTexId, null);
-                mat.SetFloat(CloakShaderManager.UseCloakMaskTexId, 0f);
+                mat.SetTexture(CloakShaderManager.CloakMaskTexId, CloakMaskManager.BlackWeightMask);
                 return;
             }
 
@@ -99,18 +93,9 @@ namespace HornetCloakColor.Client
             mat.SetFloat(CloakShaderManager.TargetValId, Mathf.Lerp(0.6f, 1.4f, v));
             mat.SetFloat(CloakShaderManager.StrengthId, 1f);
 
-            if (CloakPaletteConfig.UseCloakMaskTextures && mat.mainTexture != null)
-            {
-                var collectionName = sprite?.Collection != null ? sprite.Collection.name : null;
-                var mask = CloakMaskManager.GetMaskForMainTexture(mat.mainTexture, collectionName, out var useMask);
-                mat.SetTexture(CloakShaderManager.CloakMaskTexId, mask);
-                mat.SetFloat(CloakShaderManager.UseCloakMaskTexId, useMask ? 1f : 0f);
-            }
-            else
-            {
-                mat.SetTexture(CloakShaderManager.CloakMaskTexId, null);
-                mat.SetFloat(CloakShaderManager.UseCloakMaskTexId, 0f);
-            }
+            var collectionName = sprite?.Collection != null ? sprite.Collection.name : null;
+            var mask = CloakMaskManager.GetMaskForMainTexture(mat.mainTexture, collectionName);
+            mat.SetTexture(CloakShaderManager.CloakMaskTexId, mask);
         }
 
         private static void ApplyVertexTint(Material mat, tk2dSprite? sprite, CloakColor color)

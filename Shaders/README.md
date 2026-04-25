@@ -1,8 +1,7 @@
 # Cloak hue-shift shader
 
-This folder contains the source for the **CloakHueShift** shader used by `HornetCloakColor`
-to recolor only Hornet's cloak by matching texture pixels to reference RGB colors, with an
-optional second list that **suppresses** recoloring where pixels match (skin, metal, etc.).
+This folder contains **CloakHueShift** (in-game: R mask × HSV tint only) and **CloakMaskBake**
+(bakes those R masks from `cloak_palette.json` reference and avoid colors).
 
 The shader runs in the built-in render pipeline, sits in for `Sprites/Default`, and is
 shipped as an `AssetBundle` so the mod can ship as a single DLL.
@@ -11,8 +10,8 @@ shipped as an `AssetBundle` so the mod can ship as a single DLL.
 
 | File | Purpose |
 | ---- | ------- |
-| `CloakHueShift.shader` | In-game shader (RGB cloak mask + optional avoid mask + HSV hue replacement). |
-| `CloakMaskBake.shader` | Same cloak/avoid mask math only — used to bake `CloakMasks/**/*.png` on disk (must ship in the same bundle). |
+| `CloakHueShift.shader` | In-game shader: samples `_CloakMaskTex.r` and applies HSV tint (no RGB distance at draw time). |
+| `CloakMaskBake.shader` | RGB cloak + avoid mask math — used to bake `CloakMasks/**/*.png` on disk (must ship in the same bundle). |
 | `Editor/BuildCloakShaderBundle.cs` | Unity editor menu that builds the AssetBundle (both shaders). |
 
 ## How to bake the AssetBundle
@@ -43,30 +42,28 @@ string inside the `.shader` file. The mod loader tries both plus a full scan so 
 
 ## Runtime behavior
 
-* If the bundle is embedded, the mod adds a `CloakRecolor` MonoBehaviour to each player
-  that swaps `Sprites/Default` for `CloakHueShift` and uploads reference colors from
-  `cloak_palette.json` plus the user's chosen tint in HSV.
+* If the bundle is embedded, the mod swaps `Sprites/Default` for `CloakHueShift`, binds the
+  per-atlas **R mask** (`CloakMasks/...` or a 1×1 black fallback), and uploads the user's tint in HSV.
+* **`cloak_palette.json` colors** are not sent to `CloakHueShift`; they are used when **generating**
+  mask PNGs via `CloakMaskBake` (GPU blit).
 * If the bundle is missing, the mod falls back to tinting the whole sprite via vertex color.
 
-## Reference colors and matching
+## `cloak_palette.json` and mask baking
 
-The mod loads **`cloak_palette.json`** next to `HornetCloakColor.dll` (see `Config/cloak_palette.json`
-in the repo). Schema:
+The mod loads **`cloak_palette.json`** next to `HornetCloakColor.dll` (see `Config/cloak_palette.json`).
+Fields that affect **mask generation** (`CloakMaskBake`):
 
 | Field | Role |
 | ----- | ---- |
-| `cloakColors` | Array of reference hex colors (up to **16**). See shipped `Config/cloak_palette.json`. |
-| `avoidColors` | Optional array (up to **16**). Texels close to any avoid color get the recolor mask reduced. |
-| `matchRadius` | Max RGB distance (0–1 scale) for cloak matching; larger = more pixels included. |
-| `avoidMatchRadius` | Same idea for `avoidColors`. If omitted, defaults to `matchRadius`. |
+| `cloakColors` | Array of reference hex colors (up to **16**). |
+| `avoidColors` | Optional array (up to **16**). Texels close to any avoid color get the baked mask reduced. |
+| `matchRadius` | RGB distance (0–1 scale) for cloak matching in the bake shader. |
+| `avoidMatchRadius` | Same for `avoidColors`. If omitted, defaults to `matchRadius`. |
 | `debugLogging` | Optional verbose logs. |
 
-At runtime, arrays are uploaded as `_SrcColors[16]` and `_AvoidColors[16]` (unused slots pushed far
-away so they never match). The fragment shader:
-
-1. Computes `min` RGB distance to cloak references → smoothstep cloak mask.
-2. If `_AvoidMatchRadius` &gt; 0, computes `min` distance to avoid references → `avoidFactor = smoothstep(inner, outer, minAvoid)` and **multiplies** the cloak mask (close to an avoid color → factor → 0).
-3. Replaces hue/saturation with the user's color while preserving value for shading.
+The **CloakHueShift** fragment shader only: samples mask R × `_Strength`, then replaces hue/saturation
+while preserving value for shading.
 
 **Adding more colors:** sample pixels from the relevant atlas and append to `cloakColors` or
-`avoidColors`. Re-bake the AssetBundle after **shader** changes; JSON-only edits do not require Unity.
+`avoidColors`, then re-run mask generation (delete that atlas PNG or let the mod bake a missing file).
+Re-bake the AssetBundle after **shader** changes; JSON-only edits do not require Unity.

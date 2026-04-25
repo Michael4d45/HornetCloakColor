@@ -1,11 +1,8 @@
 // Shader: HornetCloakColor/CloakHueShift
 //
-// Recolors texels whose RGB is close to ANY of up to 16 reference cloak colors.
-// Optionally, texels close to ANY of up to 16 "avoid" colors get their mask reduced
-// (skin, metal, etc.) so they are not recolored even if they sit near cloak colors in RGB.
-// Reference lists come from cloak_palette.json.
-// User chooses a target tint via _TargetHue/_TargetSat/_TargetVal; matched
-// texels get that hue/sat with original value preserved for shading.
+// Recolor weight comes only from _CloakMaskTex (R channel, 0–1), baked offline or by
+// CloakMaskBake.shader from cloak_palette.json colors. User tint via _TargetHue/_TargetSat/_TargetVal;
+// matched weight scales HSV toward that tint (value preserved for shading).
 Shader "HornetCloakColor/CloakHueShift"
 {
     Properties
@@ -17,12 +14,9 @@ Shader "HornetCloakColor/CloakHueShift"
         _TargetSat ("Target Saturation Multiplier", Range(0,2)) = 1.0
         _TargetVal ("Target Value Multiplier", Range(0,2)) = 1.0
 
-        _MatchRadius ("RGB Match Radius", Range(0.02,0.6)) = 0.18
-        _AvoidMatchRadius ("Avoid RGB Radius", Range(0.02,0.6)) = 0.18
         _Strength ("Recolor Strength", Range(0,1)) = 1.0
 
         [NoScaleOffset] _CloakMaskTex ("Cloak Mask (R = weight)", 2D) = "white" {}
-        _UseCloakMaskTex ("Use Mask Texture (0=procedural)", Range(0,1)) = 0
     }
 
     SubShader
@@ -48,9 +42,6 @@ Shader "HornetCloakColor/CloakHueShift"
             #pragma fragment frag
             #include "UnityCG.cginc"
 
-            #define MAX_CLOAK_COLORS 16
-            #define MAX_AVOID_COLORS 16
-
             struct appdata_t
             {
                 float4 vertex   : POSITION;
@@ -73,15 +64,7 @@ Shader "HornetCloakColor/CloakHueShift"
             float _TargetHue;
             float _TargetSat;
             float _TargetVal;
-            float _MatchRadius;
-            float _AvoidMatchRadius;
             float _Strength;
-            float _UseCloakMaskTex;
-
-            // Filled from C# every frame. Unused slots are pushed far away (rgb = 10) so
-            // distance() stays huge and they never contribute to the mask.
-            float4 _SrcColors[MAX_CLOAK_COLORS];
-            float4 _AvoidColors[MAX_AVOID_COLORS];
 
             v2f vert(appdata_t IN)
             {
@@ -114,36 +97,7 @@ Shader "HornetCloakColor/CloakHueShift"
                 fixed4 tex = tex2D(_MainTex, IN.texcoord);
                 float3 t = tex.rgb;
 
-                float minD = 999.0;
-                [unroll]
-                for (int i = 0; i < MAX_CLOAK_COLORS; i++)
-                {
-                    float di = distance(t, _SrcColors[i].rgb);
-                    minD = min(minD, di);
-                }
-
-                float inner = _MatchRadius * 0.35;
-                float proceduralMask = (1.0 - smoothstep(inner, _MatchRadius, minD));
-
-                // Suppress recolor where texel is close to any avoid color (skin, trim, etc.)
-                if (_AvoidMatchRadius > 1e-5)
-                {
-                    float minAvoid = 999.0;
-                    [unroll]
-                    for (int j = 0; j < MAX_AVOID_COLORS; j++)
-                    {
-                        float dj = distance(t, _AvoidColors[j].rgb);
-                        minAvoid = min(minAvoid, dj);
-                    }
-                    float aInner = _AvoidMatchRadius * 0.35;
-                    float avoidFactor = smoothstep(aInner, _AvoidMatchRadius, minAvoid);
-                    proceduralMask *= avoidFactor;
-                }
-
-                proceduralMask *= _Strength;
-
-                float texMask = tex2D(_CloakMaskTex, IN.texcoord).r * _Strength;
-                float mask = lerp(proceduralMask, texMask, saturate(_UseCloakMaskTex));
+                float mask = tex2D(_CloakMaskTex, IN.texcoord).r * _Strength;
 
                 float3 hsv = RGBtoHSV(t);
                 float3 hsvOut = float3(_TargetHue,

@@ -82,13 +82,6 @@ namespace HornetCloakColor.Client
         public static int HeroMeshRescanIntervalFrames { get; private set; }
 
         /// <summary>
-        /// When true, per-atlas R masks in <c>&lt;plugin&gt;/CloakMasks/&lt;collection&gt;/&lt;MainTex.name&gt;.png</c> replace the
-        /// procedural RGB distance mask (same weight the shader would compute, including avoid colors).
-        /// Missing PNGs are generated once next to the DLL so you can hand-edit them.
-        /// </summary>
-        public static bool UseCloakMaskTextures { get; private set; }
-
-        /// <summary>
         /// When true, walks every texture slot on each player <see cref="MeshRenderer"/>
         /// shared material, dumps each distinct atlas as PNG under <c>TextureDumps/&lt;collection&gt;/</c> (see
         /// <see cref="TextureDumper"/> for layout) and maintains
@@ -148,8 +141,6 @@ namespace HornetCloakColor.Client
                                 Log.Info("[MapIcon] mapIconDebugLogging is true — tracing map/compass sync; grep log for \"[MapIcon]\".");
                             if (PerfDiagnostics)
                                 Log.Info("[HCC/Perf] perfDiagnostics is true — grep BepInEx log for \"[HCC/Perf]\" (≈2s rolling window).");
-                            if (UseCloakMaskTextures)
-                                Log.Info("[CloakMasks] useCloakMaskTextures enabled — R masks in CloakMasks/<atlas name>.png (auto-generated if missing).");
                         }
                         else
                             Log.Warn("cloak_palette.json was not valid; using built-in defaults from the mod DLL.");
@@ -187,7 +178,6 @@ namespace HornetCloakColor.Client
             HeroMeshRescanIntervalFrames = 30;
             DumpDiscoveredTextures = false;
             PerfDiagnostics = false;
-            UseCloakMaskTextures = false;
         }
 
         /// <summary>
@@ -235,9 +225,6 @@ namespace HornetCloakColor.Client
 
             if (TryExtractBool(trimmed, "perfDiagnostics", out var perf))
                 PerfDiagnostics = perf;
-
-            if (TryExtractBool(trimmed, "useCloakMaskTextures", out var useMasks))
-                UseCloakMaskTextures = useMasks;
 
             return true;
         }

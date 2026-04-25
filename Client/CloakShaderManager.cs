@@ -34,7 +34,6 @@ namespace HornetCloakColor.Client
         public static readonly int AvoidMatchRadiusId = Shader.PropertyToID("_AvoidMatchRadius");
         public static readonly int StrengthId = Shader.PropertyToID("_Strength");
         public static readonly int CloakMaskTexId = Shader.PropertyToID("_CloakMaskTex");
-        public static readonly int UseCloakMaskTexId = Shader.PropertyToID("_UseCloakMaskTex");
 
         /// <summary>The loaded cloak-tint shader, or null if the bundle is unavailable.</summary>
         public static Shader? Shader

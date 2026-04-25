@@ -8,11 +8,9 @@ using UnityEngine;
 namespace HornetCloakColor.Client
 {
     /// <summary>
-    /// Optional per-atlas R masks under <c>CloakMasks/&lt;tk2d collection name&gt;/&lt;MainTex.name&gt;.png</c>
+    /// Per-atlas R masks under <c>CloakMasks/&lt;tk2d collection name&gt;/&lt;MainTex.name&gt;.png</c>
     /// next to the plugin DLL (legacy flat <c>CloakMasks/&lt;MainTex.name&gt;.png</c> is still loaded if present).
-    /// When <see cref="CloakPaletteConfig.UseCloakMaskTextures"/> is true, weights come from the PNG
-    /// (same 0–1 weight as the procedural cloak+avoid mask with <c>_Strength = 1</c> in the shader).
-    /// Missing files are generated once via GPU readback and saved for hand-editing.
+    /// Weights drive the in-game cloak shader; missing files are GPU-baked once (see <c>CloakMaskBake</c>) and saved for hand-editing.
     /// </summary>
     internal static class CloakMaskManager
     {
@@ -20,13 +18,28 @@ namespace HornetCloakColor.Client
         private static readonly Dictionary<string, Texture2D> ByMaskFilePath = new(StringComparer.OrdinalIgnoreCase);
         private static string? _pluginDir;
         private static bool _warnedMissingBakeShader;
+        private static Texture2D? _blackWeight1x1;
+
+        /// <summary>R=0 mask so the tint shader leaves pixels unchanged when no real mask exists.</summary>
+        public static Texture2D BlackWeightMask
+        {
+            get
+            {
+                if (_blackWeight1x1 != null) return _blackWeight1x1;
+                var t = new Texture2D(1, 1, TextureFormat.RGBA32, false, true);
+                t.SetPixel(0, 0, Color.clear);
+                t.Apply(false, true);
+                t.name = "CloakMask:BlackFallback";
+                return _blackWeight1x1 = t;
+            }
+        }
 
         /// <summary>Drop cached <see cref="Texture2D"/> masks after <see cref="CloakPaletteConfig.Load"/>.</summary>
         public static void OnPaletteReloaded()
         {
             foreach (var tex in ByMaskFilePath.Values)
             {
-                if (tex != null)
+                if (tex != null && tex != _blackWeight1x1)
                     UnityEngine.Object.Destroy(tex);
             }
 
@@ -45,18 +58,17 @@ namespace HornetCloakColor.Client
         }
 
         /// <summary>
-        /// Returns a linear <see cref="Texture2D"/> mask for <paramref name="mainTex"/> when file or cache exists;
-        /// <paramref name="useMask"/> is false when falling back to procedural shader math only.
+        /// Returns a linear <see cref="Texture2D"/> mask for <paramref name="mainTex"/> (disk, cache, or GPU bake).
+        /// On failure (no atlas, bake shader missing, etc.) returns <see cref="BlackWeightMask"/> so tint weight is zero.
         /// </summary>
         /// <param name="tk2dCollectionName"><c>tk2dSprite.Collection.name</c> for on-disk layout (sanitized folder).</param>
-        public static Texture2D? GetMaskForMainTexture(Texture? mainTex, string? tk2dCollectionName, out bool useMask)
+        public static Texture2D GetMaskForMainTexture(Texture? mainTex, string? tk2dCollectionName)
         {
-            useMask = false;
-            if (!CloakPaletteConfig.UseCloakMaskTextures || mainTex == null || string.IsNullOrEmpty(PluginDir))
-                return null;
+            if (mainTex == null || string.IsNullOrEmpty(PluginDir))
+                return BlackWeightMask;
 
             if (mainTex.width <= 0 || mainTex.height <= 0)
-                return null;
+                return BlackWeightMask;
 
             var collectionStem = CloakDiskNames.CollectionFolder(tk2dCollectionName);
             var texStem = CloakDiskNames.SanitizeFileStem(
@@ -70,7 +82,7 @@ namespace HornetCloakColor.Client
             catch (Exception ex)
             {
                 Log.Warn($"[CloakMasks] Could not create '{masksDir}': {ex.Message}");
-                return null;
+                return BlackWeightMask;
             }
 
             var collectionDir = Path.Combine(masksDir, collectionStem);
@@ -78,10 +90,7 @@ namespace HornetCloakColor.Client
             var legacyFlatPath = Path.Combine(masksDir, $"{texStem}.png");
 
             if (ByMaskFilePath.TryGetValue(preferredPath, out var cached) && cached != null)
-            {
-                useMask = true;
                 return cached;
-            }
 
             Texture2D? maskTex = null;
             string? resolvedPath = null;
@@ -98,7 +107,7 @@ namespace HornetCloakColor.Client
                     (maskTex.width != mainTex.width || maskTex.height != mainTex.height))
                 {
                     Log.Warn($"[CloakMasks] '{resolvedPath}' size {maskTex.width}x{maskTex.height} does not match atlas " +
-                             $"'{mainTex.name}' ({mainTex.width}x{mainTex.height}). Using procedural mask for this atlas.");
+                             $"'{mainTex.name}' ({mainTex.width}x{mainTex.height}). Using zero mask (no recolor) for this atlas.");
                     UnityEngine.Object.Destroy(maskTex);
                     maskTex = null;
                 }
@@ -108,7 +117,7 @@ namespace HornetCloakColor.Client
             {
                 maskTex = GenerateProceduralMask(mainTex);
                 if (maskTex == null)
-                    return null;
+                    return BlackWeightMask;
 
                 try
                 {
@@ -127,7 +136,6 @@ namespace HornetCloakColor.Client
             maskTex.filterMode = FilterMode.Bilinear;
             maskTex.name = $"CloakMask:{collectionStem}/{texStem}";
             ByMaskFilePath[preferredPath] = maskTex;
-            useMask = true;
             return maskTex;
         }
 
