@@ -19,6 +19,7 @@ namespace HornetCloakColor.Client
         private static string? _pluginDir;
         private static bool _warnedMissingBakeShader;
         private static Texture2D? _blackWeight1x1;
+        private static readonly HashSet<string> DumpedOriginalPaths = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>R=0 mask so the tint shader leaves pixels unchanged when no real mask exists.</summary>
         public static Texture2D BlackWeightMask
@@ -44,6 +45,7 @@ namespace HornetCloakColor.Client
             }
 
             ByMaskFilePath.Clear();
+            DumpedOriginalPaths.Clear();
         }
 
         private static string PluginDir
@@ -136,7 +138,59 @@ namespace HornetCloakColor.Client
             maskTex.filterMode = FilterMode.Bilinear;
             maskTex.name = $"CloakMask:{collectionStem}/{texStem}";
             ByMaskFilePath[preferredPath] = maskTex;
+
+            var maskPathForDump = resolvedPath ?? preferredPath;
+            MaybeDumpDiscoveredSourceTexture(mainTex, maskPathForDump);
+
             return maskTex;
+        }
+
+        /// <summary>
+        /// Writes <c>&lt;mask-stem&gt;-original.png</c> beside the mask (or canonical mask folder when baked).
+        /// </summary>
+        private static void MaybeDumpDiscoveredSourceTexture(Texture mainTex, string siblingMaskPath)
+        {
+            if (!CloakPaletteConfig.DumpDiscoveredTextures)
+                return;
+
+            var dir = Path.GetDirectoryName(siblingMaskPath);
+            var maskStem = Path.GetFileNameWithoutExtension(siblingMaskPath);
+            if (string.IsNullOrEmpty(dir) || string.IsNullOrEmpty(maskStem))
+                return;
+
+            var outPath = Path.Combine(dir, $"{maskStem}-original.png");
+            if (DumpedOriginalPaths.Contains(outPath) || File.Exists(outPath))
+                return;
+
+            var w = mainTex.width;
+            var h = mainTex.height;
+            if (w <= 0 || h <= 0)
+                return;
+
+            var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+            var prev = RenderTexture.active;
+            try
+            {
+                Graphics.Blit(mainTex, rt);
+                RenderTexture.active = rt;
+                var dst = new Texture2D(w, h, TextureFormat.RGBA32, false, true);
+                dst.ReadPixels(new Rect(0, 0, w, h), 0, 0);
+                dst.Apply(false, false);
+                Directory.CreateDirectory(dir);
+                File.WriteAllBytes(outPath, dst.EncodeToPNG());
+                DumpedOriginalPaths.Add(outPath);
+                Log.Info($"[CloakMasks] dumpDiscoveredTextures: wrote '{outPath}'.");
+                UnityEngine.Object.Destroy(dst);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"[CloakMasks] dumpDiscoveredTextures: could not write '{outPath}': {ex.Message}");
+            }
+            finally
+            {
+                RenderTexture.active = prev;
+                RenderTexture.ReleaseTemporary(rt);
+            }
         }
 
         private static Texture2D? LoadMaskFromDisk(string path)

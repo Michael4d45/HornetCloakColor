@@ -231,7 +231,7 @@ namespace HornetCloakColor.Client
             return t.name.StartsWith("Compass Icon", StringComparison.Ordinal);
         }
 
-        /// <summary>Hierarchy path like <c>Root/Child/Leaf</c> for logging and dump manifests.</summary>
+        /// <summary>Hierarchy path like <c>Root/Child/Leaf</c> for logging.</summary>
         internal static string FormatTransformPath(Transform? t)
         {
             if (t == null) return "(null)";

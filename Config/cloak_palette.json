@@ -39,7 +39,7 @@
   "debugLogging": false,
   "_comment_mapIcon": "When true, logs SSMP compass/map-icon sync (without cloak scanner noise unless debugLogging is on).",
   "mapIconDebugLogging": false,
-  "_comment_scanner": "CloakSceneScanner (orphan tk2d sprites only): an orphan matches if tk2dSprite.Collection.name hits any case-insensitive substring in collectionNameContains (OR between entries). Silksong.AssetHelper does not publish a full Hornet player atlas list; use DebugTools.DumpAllAssetNames / bundle asset dumps and grep, or run with debugLogging to log collection= / paths, then add substrings here. No registry or other heuristics. Heuristics below are distilled from adjacent Customizer skin packs (folder name = collection.name, e.g. CuteHornet/Rark Hornet), CustomizerT2DOnly (sactx … Hornet runtime keys), and SSMP PlayerManager (playable hierarchy still uses internal Knight naming). Prefer Knight/ over bare Knight to avoid matching the Knight Hatchling Cln collection. Dropped Tools Cln after dump verification (tools sheet is main-tint but not cloak-colored).",
+  "_comment_scanner": "CloakSceneScanner (orphan tk2d sprites only): an orphan matches if tk2dSprite.Collection.name hits any case-insensitive substring in collectionNameContains (OR between entries). Silksong.AssetHelper does not publish a full Hornet player atlas list; use DebugTools.DumpAllAssetNames / bundle asset dumps and grep, or run with debugLogging to log collection= / paths, then add substrings here. No registry or other heuristics. Heuristics below are distilled from adjacent Customizer skin packs (folder name = collection.name, e.g. CuteHornet/Rark Hornet), CustomizerT2DOnly (sactx … Hornet runtime keys), and SSMP PlayerManager (playable hierarchy still uses internal Knight naming). Prefer Knight/ over bare Knight to avoid matching the Knight Hatchling Cln collection. Dropped Tools Cln (tools sheet is main-tint but not cloak-colored).",
   "collectionNameContains": [
     "Ability Get Thread Cln",
     "Belltown House Cln",
@@ -99,9 +99,10 @@
 
   "_comment_heroMesh": "CloakRecolor re-scans the player MeshRenderer list every N frames; material re-apply is still every LateUpdate.",
   "heroMeshRescanIntervalFrames": 30,
-  "_comment_dump": "When true: writes TextureDumps/<tk2d collection>/<Texture.name>.png (same path pattern as CloakMasks/) plus texture_dump_manifest.json.",
-  "dumpDiscoveredTextures": false,
 
   "_comment_perf": "Aggregated [HCC/Perf] lines every ~2s when true.",
-  "perfDiagnostics": false
+  "perfDiagnostics": false,
+
+  "_comment_dumpTex": "When true, first use of each mask writes the game's mainTexture beside it as <mask-stem>-original.png (skipped if that file already exists).",
+  "dumpDiscoveredTextures": false
 }

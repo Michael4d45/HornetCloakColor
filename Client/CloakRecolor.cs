@@ -113,8 +113,6 @@ namespace HornetCloakColor.Client
                 if (IsUnderSsmpUsernameObject(meshRenderer.transform))
                     continue;
 
-                TextureDumper.CollectHeroHierarchyTextures(meshRenderer);
-
                 CloakMaterialApplier.Apply(
                     meshRenderer,
                     sprite: null,

@@ -63,6 +63,14 @@ namespace HornetCloakColor.Client
         public static bool PerfDiagnostics { get; private set; }
 
         /// <summary>
+        /// When true, the first time a mask is resolved for an atlas, writes the in-game
+        /// <c>mainTexture</c> next to the mask as <c>&lt;mask-stem&gt;-original.png</c> (same folder as the
+        /// mask file on disk, or next to the canonical path when the mask was GPU-baked). Skips if that
+        /// file already exists.
+        /// </summary>
+        public static bool DumpDiscoveredTextures { get; private set; }
+
+        /// <summary>
         /// How often (in frames) <see cref="CloakSceneScanner"/> runs <c>FindObjectsByType</c> to
         /// refresh its orphan-renderer cache. Tint <see cref="CloakMaterialApplier.Apply"/> runs every
         /// <c>LateUpdate</c> on cached renderers, so values &gt; 1 save work without the old flicker.
@@ -81,15 +89,6 @@ namespace HornetCloakColor.Client
         /// lower picks up new child meshes from animations sooner. 1 = previous behavior (full scan every frame).
         /// </summary>
         public static int HeroMeshRescanIntervalFrames { get; private set; }
-
-        /// <summary>
-        /// When true, walks every texture slot on each player <see cref="MeshRenderer"/>
-        /// shared material, dumps each distinct atlas as PNG under <c>TextureDumps/&lt;collection&gt;/</c> (see
-        /// <see cref="TextureDumper"/> for layout) and maintains
-        /// <c>texture_dump_manifest.json</c> with allowlist vs main-texture-slot
-        /// flags for tuning false positives / false negatives. Default: false (cheap), turn on temporarily.
-        /// </summary>
-        public static bool DumpDiscoveredTextures { get; private set; }
 
         /// <summary>
         /// True if <see cref="CloakSceneScanner"/> has no allowlist entries (orphan sprites
@@ -177,8 +176,8 @@ namespace HornetCloakColor.Client
             };
             SceneScanIntervalFrames = 3;
             HeroMeshRescanIntervalFrames = 30;
-            DumpDiscoveredTextures = false;
             PerfDiagnostics = false;
+            DumpDiscoveredTextures = false;
         }
 
         /// <summary>
@@ -221,11 +220,11 @@ namespace HornetCloakColor.Client
             if (TryExtractInt(trimmed, "heroMeshRescanIntervalFrames", out var heroIv) && heroIv > 0 && heroIv <= 600)
                 HeroMeshRescanIntervalFrames = heroIv;
 
-            if (TryExtractBool(trimmed, "dumpDiscoveredTextures", out var dump))
-                DumpDiscoveredTextures = dump;
-
             if (TryExtractBool(trimmed, "perfDiagnostics", out var perf))
                 PerfDiagnostics = perf;
+
+            if (TryExtractBool(trimmed, "dumpDiscoveredTextures", out var dumpTex))
+                DumpDiscoveredTextures = dumpTex;
 
             return true;
         }

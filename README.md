@@ -84,12 +84,6 @@ not need to edit it.
 - `collectionNameContains`: the **only** way the scene-wide orphan scanner matches sprites
   (OR between substrings against `tk2dSprite.Collection.name`). Tune using `debugLogging`
   log lines (`collection=`). There is no texture registry or other fuzzy mode for the scanner.
-- `dumpDiscoveredTextures`: when `true`, each distinct runtime texture (once per
-  `InstanceID`) is written under `BepInEx/plugins/HornetCloakColor/TextureDumps/` as
-  `Texture2D/<Texture.name>.png` (same naming as CustomizerT2D), copies under each
-  `tk2d` collection subfolder (e.g. `Hornet Cln/`) when known, plus
-  `texture_dump_manifest.json` in `TextureDumps/`. No layout options. Default `false` — turn
-  on temporarily, then turn off again.
 - `sceneScanIntervalFrames`: how often (in frames) the scanner runs `FindObjectsByType`
   to refresh its cache of orphan renderers. Tint is still applied **every** `LateUpdate` to
   that cache (so FX/HUD do not flicker when tk2d resets materials). `1` = rescan every frame;
@@ -131,8 +125,7 @@ A `thunderstore/dist/*.zip` is produced automatically alongside the compiled DLL
   substrings on tk2d collection name, `Texture.name`, and/or the full transform path; OR
   between those lists). It covers renderers **outside** the player hierarchy (steam-vent
   recoil, item-get pose, etc.). `CloakRecolor` ancestors are skipped so remote players keep
-  their own colors. Orphans are **not** matched by the hero texture-ID registry (that exists
-  only to tag atlases for optional PNG dumps). To discover substrings, enable `debugLogging` or
+  their own colors. To discover substrings, enable `debugLogging` or
   use [Silksong AssetHelper](https://github.com/silksong-modding/Silksong.AssetHelper)
   `DebugTools.DumpAllAssetNames` and search the output — bundle **asset** paths are not the same
   as in-game `atlas0` names, and the AssetHelper in-repo test JSONs are not a player-atlas list.

@@ -5,8 +5,8 @@ using System.Text;
 namespace HornetCloakColor.Client
 {
     /// <summary>
-    /// Shared filesystem-safe names for <see cref="CloakMaskManager"/> and <see cref="TextureDumper"/>
-    /// so dumps and masks line up under the same <c>&lt;collection&gt;/&lt;texture&gt;.png</c> layout.
+    /// Filesystem-safe folder and file stems for <see cref="CloakMaskManager"/> mask PNGs
+    /// (<c>&lt;collection&gt;/&lt;texture&gt;.png</c> under <c>CloakMasks/</c>).
     /// </summary>
     internal static class CloakDiskNames
     {
