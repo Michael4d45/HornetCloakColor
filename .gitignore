@@ -44,3 +44,6 @@ artifacts/
 
 # Mono
 mono_crash.*
+
+# textures
+CloakMasks/*/*-original.png
