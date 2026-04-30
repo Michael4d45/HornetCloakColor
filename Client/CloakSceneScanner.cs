@@ -14,14 +14,25 @@ namespace HornetCloakColor.Client
     /// mask PNG under <c>CloakMasks/</c>.
     ///
     /// Catches renderers spawned <i>outside</i> <see cref="HeroController"/>'s hierarchy
-    /// (e.g. steam-vent recoil, item-get pose).
+    /// (e.g. steam-vent recoil, item-get pose, <c>Knight Spike Death(Clone)</c>).
     ///
     /// <para>
-    /// Discovery (full <see cref="FindObjectsByType{T}(FindObjectsSortMode)"/> walk) only runs on
-    /// scene change and on a slow trickle (<see cref="RescanIntervalSec"/>) — not every frame.
-    /// The walk itself is <b>budget-sliced</b> across frames via a coroutine
-    /// (<see cref="RebuildBudgetMs"/> per frame) so a heavy scene transition or periodic rescan
-    /// never absorbs the whole discovery cost in a single frame.
+    /// Discovery has two paths:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item>
+    ///     <see cref="OnSpriteSpawned"/> is called from a Harmony postfix on
+    ///     <c>tk2dSprite.Awake</c> (see <see cref="CloakSpawnHookHarmonyPatcher"/>) so newly-
+    ///     spawned masked sprites are tinted on the same frame they appear. This is the
+    ///     latency-sensitive path that catches transient effects (death animations, etc.).
+    ///   </item>
+    ///   <item>
+    ///     A budget-sliced full <see cref="FindObjectsByType{T}(FindObjectsSortMode)"/> walk
+    ///     runs on scene change and on a slow backstop (<see cref="RescanIntervalSec"/>),
+    ///     for any sprite the spawn hook missed (e.g. material assigned after Awake).
+    ///   </item>
+    /// </list>
+    /// <para>
     /// Per-frame work walks the cached eligible-renderer list and calls the memoized
     /// <see cref="CloakMaterialApplier.Apply"/>, which is essentially free when nothing changed.
     /// </para>
@@ -128,96 +139,138 @@ namespace HornetCloakColor.Client
         }
 
         /// <summary>
-        /// Budget-sliced full scene walk: build the list of orphan masked renderers we want to
-        /// keep tinted. Yields whenever the per-frame budget (<see cref="RebuildBudgetMs"/>) is
-        /// exhausted so a heavy scene transition doesn't compound into a single big spike.
+        /// Called from <see cref="CloakSpawnHookHarmonyPatcher"/> on every <c>tk2dSprite.Awake</c>.
+        /// Same-frame eligibility check + immediate apply, so a transient spawn (e.g.
+        /// <c>Knight Spike Death(Clone)</c>) is tinted on its first rendered frame instead of
+        /// waiting up to <see cref="RescanIntervalSec"/> seconds for the next backstop scan.
+        /// </summary>
+        internal static void OnSpriteSpawned(tk2dSprite sprite)
+        {
+            if (Instance == null || sprite == null) return;
+            Instance.TryEnrollEligible(sprite, source: "Spawn");
+        }
+
+        /// <summary>
+        /// Eligibility check shared by the spawn hook and the periodic scan. Returns the matched
+        /// mask (via <see cref="CloakMaskManager"/>'s caches) when the sprite qualifies, or
+        /// <c>false</c> otherwise. Cheap on warm caches: a previously-seen atlas resolves in O(1)
+        /// without string allocation.
+        /// </summary>
+        private bool PassesEligibility(MeshRenderer renderer, tk2dSprite sprite)
+        {
+            if (renderer == null || sprite == null) return false;
+
+            var shared = renderer.sharedMaterial;
+            if (shared == null) return false;
+            // _MainTex must exist; touching mat.mainTexture on a custom shader without it
+            // (e.g. Heat Effect) would log a Unity error.
+            if (!shared.HasProperty(CloakShaderManager.MainTexId)) return false;
+
+            var tex = shared.mainTexture;
+            if (tex == null) return false;
+
+            // Renderers under a CloakRecolor are owned by the per-player path. Compass icons are
+            // tinted by the map-mask code; both paths would otherwise stomp on each other.
+            if (renderer.GetComponentInParent<CloakRecolor>() != null) return false;
+            if (IsCompassIcon(renderer.transform)) return false;
+
+            var collectionName = sprite.Collection != null ? (sprite.Collection.name ?? string.Empty) : string.Empty;
+            return CloakMaskManager.TryGetMaskForMainTexture(tex, collectionName, out _);
+        }
+
+        /// <summary>
+        /// Add the renderer to the eligible cache and apply tint immediately. No-op if the
+        /// renderer is already tracked or doesn't qualify. Diagnostic logging is gated by
+        /// <c>debugLogging</c> and deduplicated per-texture / per-renderer.
+        /// </summary>
+        private void TryEnrollEligible(tk2dSprite sprite, string source)
+        {
+            var renderer = sprite.GetComponent<MeshRenderer>();
+            if (renderer == null) return;
+            if (_eligibleSet.Contains(renderer)) return;
+
+            if (!PassesEligibility(renderer, sprite))
+            {
+                MaybeLogIgnoredTexture(renderer, sprite);
+                return;
+            }
+
+            _eligibleSet.Add(renderer);
+            _eligibleCache.Add(renderer);
+            _eligibleSprite[renderer] = sprite;
+
+            if (CloakPaletteConfig.DebugLogging && _loggedRendererIds.Add(renderer.GetInstanceID()))
+            {
+                var tex = renderer.sharedMaterial != null ? renderer.sharedMaterial.mainTexture : null;
+                var texName = tex != null ? tex.name : "(null)";
+                var texId = tex != null ? tex.GetInstanceID() : 0;
+                var collectionName = sprite.Collection != null ? (sprite.Collection.name ?? string.Empty) : string.Empty;
+                Log.Info($"[Scanner/{source}] Tinting masked orphan renderer '{FormatTransformPath(renderer.transform)}' " +
+                         $"(tex={texName}, collection='{collectionName}', id={texId})");
+            }
+
+            // Apply now so the sprite is tinted on its first rendered frame (or, for the
+            // periodic scan, on the same frame we discovered it).
+            CloakMaterialApplier.Apply(
+                renderer,
+                sprite,
+                _color,
+                useCloakShader: true,
+                _originalShaderByRenderer);
+        }
+
+        /// <summary>
+        /// Logs <c>[Scanner] Ignored texture (no CloakMasks PNG): ...</c> at most once per
+        /// unique atlas, gated by <c>debugLogging</c>. Lets users identify which textures need
+        /// a mask PNG without spamming the log for every sprite spawn.
+        /// </summary>
+        private void MaybeLogIgnoredTexture(MeshRenderer renderer, tk2dSprite sprite)
+        {
+            if (!CloakPaletteConfig.DebugLogging) return;
+            var shared = renderer.sharedMaterial;
+            if (shared == null || !shared.HasProperty(CloakShaderManager.MainTexId)) return;
+            var tex = shared.mainTexture;
+            if (tex == null) return;
+            if (!_loggedTextureIds.Add(tex.GetInstanceID())) return;
+            var collectionName = sprite.Collection != null ? (sprite.Collection.name ?? string.Empty) : string.Empty;
+            Log.Info($"[Scanner] Ignored texture (no CloakMasks PNG): {tex.name} " +
+                     $"(id={tex.GetInstanceID()}) on '{FormatTransformPath(renderer.transform)}' " +
+                     $"(collection='{collectionName}')");
+        }
+
+        /// <summary>
+        /// Budget-sliced backstop scan. Catches sprites the spawn hook missed (e.g. material
+        /// assigned after Awake) and any sprites that existed before the patcher was applied.
         ///
-        /// While the rebuild is in-flight, <see cref="ApplyEligibleCache"/> continues to walk the
-        /// previous cache, so the visible state is still tinted (just slightly stale until the
-        /// new walk completes — a few frames at most).
+        /// Purely additive: the cache only grows here. The memoized <see cref="CloakMaterialApplier.Apply"/>
+        /// already handles "renderer is no longer eligible" gracefully by storing
+        /// <c>NoMaskRestored</c> state when its mask lookup fails on the slow path. Removal
+        /// happens via destroyed-null detection in <see cref="ApplyEligibleCache"/> and via
+        /// <see cref="OnActiveSceneChanged"/>'s scene-wide cache reset.
         /// </summary>
         private IEnumerator RebuildEligibleCacheCo()
         {
-            // Defer the start by one frame so we never share the scene-load frame with the
+            // Defer the first batch by one frame so we never share the scene-load frame with the
             // discovery walk; the game's own scene-init work already pegs that frame.
             yield return null;
 
             var sprites = FindObjectsByType<tk2dSprite>(FindObjectsSortMode.None);
-
-            // Track the previous eligible set so we can RESTORE renderers that no longer qualify
-            // (e.g. moved under the player hierarchy, or their atlas changed).
-            var stillEligible = new HashSet<MeshRenderer>();
-            var pendingSprite = new Dictionary<MeshRenderer, tk2dSprite>();
-
             var sw = Stopwatch.StartNew();
 
             if (sprites != null)
             {
                 foreach (var sprite in sprites)
                 {
-                    if (sprite == null) goto Yield;
-                    var renderer = sprite.GetComponent<MeshRenderer>();
-                    if (renderer == null) goto Yield;
+                    // TryEnrollEligible is a no-op for already-tracked / ineligible renderers,
+                    // so calling it unconditionally keeps this loop short and self-contained.
+                    if (sprite != null) TryEnrollEligible(sprite, source: "Rescan");
 
-                    var shared = renderer.sharedMaterial;
-                    if (shared == null) goto Yield;
-                    if (!shared.HasProperty(CloakShaderManager.MainTexId)) goto Yield;
-
-                    var tex = shared.mainTexture;
-                    if (tex == null) goto Yield;
-
-                    if (renderer.GetComponentInParent<CloakRecolor>() != null) goto Yield;
-                    if (IsCompassIcon(renderer.transform)) goto Yield;
-
-                    var collectionName = sprite.Collection != null ? (sprite.Collection.name ?? string.Empty) : string.Empty;
-                    if (!CloakMaskManager.TryGetMaskForMainTexture(tex, collectionName, out _))
-                    {
-                        if (CloakPaletteConfig.DebugLogging && _loggedTextureIds.Add(tex.GetInstanceID()))
-                        {
-                            Log.Info($"[Scanner] Ignored texture (no CloakMasks PNG): {tex.name} " +
-                                     $"(id={tex.GetInstanceID()}) on '{FormatTransformPath(renderer.transform)}' " +
-                                     $"(collection='{collectionName}')");
-                        }
-                        goto Yield;
-                    }
-
-                    if (stillEligible.Add(renderer))
-                    {
-                        if (CloakPaletteConfig.DebugLogging && _loggedRendererIds.Add(renderer.GetInstanceID()))
-                        {
-                            Log.Info($"[Scanner] Tinting masked orphan renderer '{FormatTransformPath(renderer.transform)}' " +
-                                     $"(tex={tex.name}, collection='{collectionName}', id={tex.GetInstanceID()})");
-                        }
-                        pendingSprite[renderer] = sprite;
-                    }
-
-                Yield:
                     if (sw.Elapsed.TotalMilliseconds > RebuildBudgetMs)
                     {
                         yield return null;
                         sw.Restart();
                     }
                 }
-            }
-
-            // Restore renderers that were previously eligible but now aren't.
-            foreach (var prev in _eligibleSet)
-            {
-                if (prev == null) continue;
-                if (stillEligible.Contains(prev)) continue;
-                CloakMaterialApplier.Restore(prev, _originalShaderByRenderer);
-            }
-
-            // Atomic-ish swap: replace the live cache with the freshly-built one.
-            _eligibleSprite.Clear();
-            foreach (var kv in pendingSprite) _eligibleSprite[kv.Key] = kv.Value;
-
-            _eligibleSet.Clear();
-            _eligibleCache.Clear();
-            foreach (var r in stillEligible)
-            {
-                _eligibleSet.Add(r);
-                _eligibleCache.Add(r);
             }
 
             _rebuildCo = null;
@@ -231,9 +284,13 @@ namespace HornetCloakColor.Client
                 var renderer = _eligibleCache[i];
                 if (renderer == null)
                 {
-                    // Destroyed mid-frame; remove and let the next rescan (or scene change)
-                    // rebuild authoritatively.
+                    // Destroyed mid-frame; drop it from every cache so transient effects
+                    // (spike-death, item-get pose, etc.) don't accumulate stale entries.
+                    // Unity-destroyed objects compare equal to null but the C# reference is
+                    // still the original wrapper, so HashSet/Dictionary will find and remove it.
                     _eligibleCache.RemoveAt(i);
+                    _eligibleSet.Remove(renderer!);
+                    _eligibleSprite.Remove(renderer!);
                     continue;
                 }
 

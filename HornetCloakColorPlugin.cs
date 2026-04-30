@@ -41,6 +41,11 @@ namespace HornetCloakColor
 
             MapMaskHarmonyPatcher.Apply();
 
+            // Same-frame tint for newly-spawned tk2dSprites (e.g. Knight Spike Death(Clone)).
+            // Without this, transient sprites can spawn-and-despawn between backstop rescans
+            // and never get tinted — the visible "sometimes she's tinted, sometimes not" bug.
+            CloakSpawnHookHarmonyPatcher.Apply();
+
             if (SSMPBridge.TryRegister())
             {
                 Logger.LogInfo("SSMP detected — multiplayer cloak sync enabled.");
