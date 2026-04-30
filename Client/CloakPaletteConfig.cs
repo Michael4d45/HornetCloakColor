@@ -1,49 +1,20 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using HornetCloakColor.Shared;
-using UnityEngine;
 
 namespace HornetCloakColor.Client
 {
     /// <summary>
-    /// Reference cloak colors and scene-scanner allowlist. Loads <c>cloak_palette.json</c> next
-    /// to the plugin DLL; built-in defaults match the shipped JSON if the file is missing.
+    /// Runtime toggles loaded from <c>cloak_palette.json</c> next to the plugin DLL.
     ///
     /// Parsing is intentionally dependency-free (regex only): Unity/BepInEx does not ship
     /// <c>System.Text.Json</c> next to game plugins, so referencing it caused TypeLoadException.
     /// </summary>
     internal static class CloakPaletteConfig
     {
-        /// <summary>
-        /// Length-<see cref="CloakShaderManager.MaxCloakColors"/> Vector4 array uploaded to the
-        /// shader. Unused slots are pushed far away (rgb = 10) so distance() never matches.
-        /// </summary>
-        public static Vector4[] SrcColors { get; private set; } = new Vector4[CloakShaderManager.MaxCloakColors];
-
-        /// <summary>How many slots in <see cref="SrcColors"/> represent real cloak colors.</summary>
-        public static int SrcCount { get; private set; }
-
-        /// <summary>
-        /// Length-<see cref="CloakShaderManager.MaxAvoidColors"/> — texels close to any of these
-        /// in RGB get their recolor mask reduced (e.g. skin, armor). Unused slots use the sentinel.
-        /// </summary>
-        public static Vector4[] AvoidColors { get; private set; } = new Vector4[CloakShaderManager.MaxAvoidColors];
-
-        /// <summary>How many entries in <see cref="AvoidColors"/> are real avoid colors.</summary>
-        public static int AvoidCount { get; private set; }
-
-        public static float MatchRadius { get; private set; }
-
-        /// <summary>
-        /// Smoothstep outer radius for the avoid mask (same semantics as <see cref="MatchRadius"/>).
-        /// If omitted from JSON, defaults to <see cref="MatchRadius"/> after that value is loaded.
-        /// </summary>
-        public static float AvoidMatchRadius { get; private set; }
-
         /// <summary>Verbose log lines (e.g. color changes). Editable in <c>cloak_palette.json</c>.</summary>
         public static bool DebugLogging { get; private set; }
 
@@ -57,31 +28,11 @@ namespace HornetCloakColor.Client
         public static bool LogMapIconDiagnostics => DebugLogging || MapIconDebugLogging;
 
         /// <summary>
-        /// When true, logs aggregated <c>[HCC/Perf]</c> lines every ~2s for
-        /// <see cref="CloakRecolor"/>, <see cref="CloakSceneScanner"/>, and map sync. Off by default.
-        /// </summary>
-        public static bool PerfDiagnostics { get; private set; }
-
-        /// <summary>
         /// When true, the first time a mask is resolved for an atlas, writes the in-game
         /// <c>mainTexture</c> next to the mask as <c>&lt;mask-stem&gt;-original.png</c> (same folder as the
-        /// mask file on disk, or next to the canonical path when the mask was GPU-baked). Skips if that
-        /// file already exists.
+        /// mask file on disk). Skips if that file already exists.
         /// </summary>
         public static bool DumpDiscoveredTextures { get; private set; }
-
-        /// <summary>
-        /// How often (in frames) <see cref="CloakSceneScanner"/> runs <c>FindObjectsByType</c> to
-        /// refresh its orphan-renderer cache. Tint <see cref="CloakMaterialApplier.Apply"/> runs every
-        /// <c>LateUpdate</c> on cached renderers, so values &gt; 1 save work without the old flicker.
-        /// </summary>
-        public static int SceneScanIntervalFrames { get; private set; }
-
-        /// <summary>
-        /// <see cref="CloakSceneScanner"/> only: substrings (case-insensitive) against
-        /// <c>tk2dSprite.Collection.name</c>.
-        /// </summary>
-        public static string[] CollectionNameContains { get; private set; } = Array.Empty<string>();
 
         /// <summary>
         /// How often <see cref="CloakRecolor"/> re-runs <c>GetComponentsInChildren</c> for <see cref="MeshRenderer"/> to
@@ -89,33 +40,6 @@ namespace HornetCloakColor.Client
         /// lower picks up new child meshes from animations sooner. 1 = previous behavior (full scan every frame).
         /// </summary>
         public static int HeroMeshRescanIntervalFrames { get; private set; }
-
-        /// <summary>
-        /// True if <see cref="CloakSceneScanner"/> has no allowlist entries (orphan sprites
-        /// will never match — add substrings to <c>collectionNameContains</c> in the JSON).
-        /// </summary>
-        public static bool SceneScanAllowlistEmpty => CollectionNameContains.Length == 0;
-
-        /// <summary>
-        /// <see cref="CloakSceneScanner"/>: <c>tk2dSprite.Collection.name</c> must match at least
-        /// one substring (OR between listed substrings).
-        /// </summary>
-        public static bool MatchesSceneScanAllowlist(string collectionName)
-        {
-            return CollectionNameContains.Length > 0
-                && MatchesAnyFilter(collectionName, CollectionNameContains);
-        }
-
-        private static bool MatchesAnyFilter(string name, string[] filters)
-        {
-            foreach (var f in filters)
-            {
-                if (string.IsNullOrEmpty(f)) continue;
-                if (name.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0) return true;
-            }
-
-            return false;
-        }
 
         public static void Load()
         {
@@ -132,15 +56,9 @@ namespace HornetCloakColor.Client
                         var json = File.ReadAllText(diskPath);
                         if (TryApplyPaletteJson(json))
                         {
-                            var allow = $"{CollectionNameContains.Length} collection allowlist substring(s)";
-                            if (SceneScanAllowlistEmpty)
-                                Log.Warn($"Loaded cloak palette from {diskPath} ({SrcCount} cloak / {AvoidCount} avoid). Scene scan allowlist is empty — orphan Hornet sprites will not be tinted; fill collectionNameContains.");
-                            else
-                                Log.Info($"Loaded cloak palette from {diskPath} ({SrcCount} cloak / {AvoidCount} avoid; {allow}).");
+                            Log.Info($"Loaded cloak runtime config from {diskPath}.");
                             if (MapIconDebugLogging)
                                 Log.Info("[MapIcon] mapIconDebugLogging is true — tracing map/compass sync; grep log for \"[MapIcon]\".");
-                            if (PerfDiagnostics)
-                                Log.Info("[HCC/Perf] perfDiagnostics is true — grep BepInEx log for \"[HCC/Perf]\" (≈2s rolling window).");
                         }
                         else
                             Log.Warn("cloak_palette.json was not valid; using built-in defaults from the mod DLL.");
@@ -157,26 +75,9 @@ namespace HornetCloakColor.Client
 
         private static void ApplyDefaults()
         {
-            // Must stay in sync with Config/cloak_palette.json (shipped defaults).
-            SetSources(ParseHexColors(
-                "#79404b", "#d4b8b8", "#7a414c", "#b2808c", "#351c20", "#501f3b", "#562d35", "#3b162b",
-                "#ec7f92", "#955a70", "#efbdd1", "#ae5c6c", "#994d5c", "#a7807b", "#be485e", "#592439"));
-            SetAvoidSources(ParseHexColors(
-                "#ffffff", "#000000", "#c7cbb5", "#16162c", "#808080", "#5b4133", "#231914", "#644662",
-                "#282c34", "#8a6187"));
-            MatchRadius = 0.135f;
-            AvoidMatchRadius = 0.120f;
             DebugLogging = false;
             MapIconDebugLogging = false;
-            CollectionNameContains = new[]
-            {
-                "Hornet Cln", "Hornet Cloakless", "Hornet CrestWeapon", "Hornet Heart Grab",
-                "Hornet Revenge Crystal", "Hornet Strung Up", "Hornet_Needolin", "Slab Cloak Scene",
-                "Crest Get Cln", "Phantom Cln",
-            };
-            SceneScanIntervalFrames = 3;
             HeroMeshRescanIntervalFrames = 30;
-            PerfDiagnostics = false;
             DumpDiscoveredTextures = false;
         }
 
@@ -189,60 +90,19 @@ namespace HornetCloakColor.Client
             var trimmed = json.TrimStart();
             if (!trimmed.StartsWith("{", StringComparison.Ordinal)) return false;
 
-            var arrayList = ExtractHexArray(trimmed, "cloakColors");
-            if (arrayList.Count > 0)
-                SetSources(arrayList);
-
-            if (TryExtractFloat(trimmed, "matchRadius", out var mr) && mr > 0f && mr <= 1f)
-                MatchRadius = mr;
-
-            var avoidList = ExtractHexArray(trimmed, "avoidColors");
-            SetAvoidSources(avoidList);
-
-            if (TryExtractFloat(trimmed, "avoidMatchRadius", out var amr) && amr > 0f && amr <= 1f)
-                AvoidMatchRadius = amr;
-            else
-                AvoidMatchRadius = MatchRadius;
-
             if (TryExtractBool(trimmed, "debugLogging", out var dbg))
                 DebugLogging = dbg;
 
             if (TryExtractBool(trimmed, "mapIconDebugLogging", out var mapIconDbg))
                 MapIconDebugLogging = mapIconDbg;
 
-            var collectionPaths = ExtractStringArray(trimmed, "collectionNameContains");
-            if (collectionPaths.Count > 0)
-                CollectionNameContains = collectionPaths.ToArray();
-
-            if (TryExtractInt(trimmed, "sceneScanIntervalFrames", out var iv) && iv > 0 && iv <= 240)
-                SceneScanIntervalFrames = iv;
-
             if (TryExtractInt(trimmed, "heroMeshRescanIntervalFrames", out var heroIv) && heroIv > 0 && heroIv <= 600)
                 HeroMeshRescanIntervalFrames = heroIv;
-
-            if (TryExtractBool(trimmed, "perfDiagnostics", out var perf))
-                PerfDiagnostics = perf;
 
             if (TryExtractBool(trimmed, "dumpDiscoveredTextures", out var dumpTex))
                 DumpDiscoveredTextures = dumpTex;
 
             return true;
-        }
-
-        private static List<string> ExtractStringArray(string json, string key)
-        {
-            var result = new List<string>();
-            var arrPattern = $"\"{Regex.Escape(key)}\"\\s*:\\s*\\[(?<arr>[^\\]]*)\\]";
-            var arrMatch = Regex.Match(json, arrPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            if (!arrMatch.Success) return result;
-
-            var inner = arrMatch.Groups["arr"].Value;
-            foreach (Match m in Regex.Matches(inner, "\"(?<s>[^\"]*)\"", RegexOptions.CultureInvariant))
-            {
-                var s = m.Groups["s"].Value;
-                if (!string.IsNullOrWhiteSpace(s)) result.Add(s);
-            }
-            return result;
         }
 
         private static bool TryExtractInt(string json, string key, out int value)
@@ -252,78 +112,6 @@ namespace HornetCloakColor.Client
             var m = Regex.Match(json, pattern, RegexOptions.CultureInvariant);
             if (!m.Success) return false;
             return int.TryParse(m.Groups["n"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
-        }
-
-        private static CloakColor[] ParseHexColors(params string[] hexes)
-        {
-            var list = new List<CloakColor>(hexes.Length);
-            foreach (var hex in hexes)
-            {
-                if (CloakColor.TryParse(hex, out var c))
-                    list.Add(c);
-            }
-
-            return list.ToArray();
-        }
-
-        private static void SetSources(IList<CloakColor> colors)
-        {
-            // Reset everything to "far away" before filling so old entries can't leak through.
-            for (var i = 0; i < SrcColors.Length; i++)
-                SrcColors[i] = new Vector4(10f, 10f, 10f, 1f);
-
-            var count = Math.Min(colors.Count, SrcColors.Length);
-            for (var i = 0; i < count; i++)
-            {
-                var c = colors[i].ToUnityColor();
-                SrcColors[i] = new Vector4(c.r, c.g, c.b, 1f);
-            }
-            SrcCount = count;
-
-            if (colors.Count > SrcColors.Length)
-            {
-                Log.Warn($"cloak_palette.json: only the first {SrcColors.Length} cloakColors are used " +
-                         $"(found {colors.Count}). Increase MaxCloakColors in the shader to lift this.");
-            }
-        }
-
-        private static void SetAvoidSources(IList<CloakColor> colors)
-        {
-            for (var i = 0; i < AvoidColors.Length; i++)
-                AvoidColors[i] = new Vector4(10f, 10f, 10f, 1f);
-
-            var count = Math.Min(colors.Count, AvoidColors.Length);
-            for (var i = 0; i < count; i++)
-            {
-                var c = colors[i].ToUnityColor();
-                AvoidColors[i] = new Vector4(c.r, c.g, c.b, 1f);
-            }
-
-            AvoidCount = count;
-
-            if (colors.Count > AvoidColors.Length)
-            {
-                Log.Warn($"cloak_palette.json: only the first {AvoidColors.Length} avoidColors are used " +
-                         $"(found {colors.Count}).");
-            }
-        }
-
-        private static List<CloakColor> ExtractHexArray(string json, string key)
-        {
-            var result = new List<CloakColor>();
-            var arrPattern = $"\"{Regex.Escape(key)}\"\\s*:\\s*\\[(?<arr>[^\\]]*)\\]";
-            var arrMatch = Regex.Match(json, arrPattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            if (!arrMatch.Success) return result;
-
-            var inner = arrMatch.Groups["arr"].Value;
-            foreach (Match hexMatch in Regex.Matches(inner, "\"(?<h>#?[0-9a-fA-F]{6})\"", RegexOptions.CultureInvariant))
-            {
-                var hex = hexMatch.Groups["h"].Value;
-                if (!hex.StartsWith("#", StringComparison.Ordinal)) hex = "#" + hex;
-                if (CloakColor.TryParse(hex, out var color))
-                    result.Add(color);
-            }
-            return result;
         }
 
         private static bool TryExtractBool(string json, string key, out bool value)
@@ -337,18 +125,5 @@ namespace HornetCloakColor.Client
             return true;
         }
 
-        private static bool TryExtractFloat(string json, string key, out float value)
-        {
-            value = 0f;
-            var pattern = $"\"{Regex.Escape(key)}\"\\s*:\\s*(?<n>[0-9]+(?:\\.[0-9]+)?(?:[eE][-+]?[0-9]+)?)";
-            var m = Regex.Match(json, pattern, RegexOptions.CultureInvariant);
-            if (!m.Success) return false;
-
-            return float.TryParse(
-                m.Groups["n"].Value,
-                NumberStyles.Float,
-                CultureInfo.InvariantCulture,
-                out value);
-        }
     }
 }

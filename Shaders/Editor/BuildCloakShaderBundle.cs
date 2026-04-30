@@ -1,5 +1,5 @@
 // Drop this file into a Unity 6000.0.50 project under Assets/Editor/ together with
-// Assets/Shaders/CloakHueShift.shader and Assets/Shaders/CloakMaskBake.shader. Then run:
+// Assets/Shaders/CloakHueShift.shader. Then run:
 //
 //     HornetCloakColor -> Build Shader Bundle
 //
@@ -18,7 +18,6 @@ namespace HornetCloakColor.EditorTools
     public static class BuildCloakShaderBundle
     {
         private const string CloakHueShiftPath = "Assets/Shaders/CloakHueShift.shader";
-        private const string CloakMaskBakePath = "Assets/Shaders/CloakMaskBake.shader";
         private const string BundleName = "cloakshader.bundle";
 
         [MenuItem("HornetCloakColor/Build Shader Bundle (Windows)")]
@@ -32,7 +31,7 @@ namespace HornetCloakColor.EditorTools
 
         private static void Build(BuildTarget target)
         {
-            var paths = new[] { CloakHueShiftPath, CloakMaskBakePath };
+            var paths = new[] { CloakHueShiftPath };
             foreach (var path in paths)
             {
                 var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
@@ -68,7 +67,7 @@ namespace HornetCloakColor.EditorTools
             }
 
             var produced = Path.Combine(outDir, BundleName);
-            Debug.Log($"[HornetCloakColor] Built {produced} for {target} (CloakHueShift + CloakMaskBake). " +
+            Debug.Log($"[HornetCloakColor] Built {produced} for {target} (CloakHueShift). " +
                       $"Copy this to HornetCloakColor/Resources/cloakshader.bundle in the mod repo.");
         }
     }

@@ -1,7 +1,6 @@
 // Shader: HornetCloakColor/CloakHueShift
 //
-// Recolor weight comes only from _CloakMaskTex (R channel, 0–1), baked offline or by
-// CloakMaskBake.shader from cloak_palette.json colors. User tint via _TargetHue/_TargetSat/_TargetVal;
+// Recolor weight comes only from _CloakMaskTex (R channel, 0–1). User tint via _TargetHue/_TargetSat/_TargetVal;
 // matched weight scales HSV toward that tint (value preserved for shading).
 Shader "HornetCloakColor/CloakHueShift"
 {

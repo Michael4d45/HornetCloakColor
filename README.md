@@ -9,8 +9,8 @@ Works **single-player out of the box**. If **[SSMP (Silksong Multiplayer)](https
 ## Features
 
 - Pick from 12 tasteful presets (Crimson, Scarlet, Amber, Gold, Emerald, Teal, Azure, Royal, Violet, Magenta, Obsidian, Ivory) or supply your own hex / RGB color.
-- **Cloak-only recolor**: a custom shader matches pixels to reference cloak colors (defaults ship **16** cloak refs + **10** avoid refs in `cloak_palette.json`) and recolors only cloak-like pixels. Edit `cloak_palette.json` next to the DLL to tune masking when an animation/atlas still looks wrong.
-- **Scene-wide coverage**: a separate scanner tints orphan `tk2dSprite`s that match substring lists in `cloak_palette.json` (collection / texture name / transform path), including poses outside the player hierarchy.
+- **Cloak-only recolor**: a custom shader uses curated R-channel mask PNGs under `CloakMasks/` and recolors only masked pixels.
+- **Scene-wide coverage**: a very-late scene pass tints orphan `tk2dSprite`s whose atlas has a matching mask PNG, including poses outside the player hierarchy.
 - If the shader bundle isn't embedded, the mod falls back to tinting the whole character.
 - Zero-friction configuration through the BepInEx configuration manager (F1 in game).
 - **Works without SSMP** — runs in single-player and recolors your own cloak. SSMP is a soft dependency: install it to also synchronize cloak colors with other players.
@@ -39,7 +39,6 @@ Works **single-player out of the box**. If **[SSMP (Silksong Multiplayer)](https
    - Set **Cloak Color Preset** to **White** for the stock cloak look (no tint): you should see the game's normal reddish cloak, not a pale sheet. **White** means the tint multiply is `#FFFFFF`, not that the cloak is dyed white.
    - Pick another preset for a tinted cloak, **or** set it to `Custom` and provide a color in the **Custom Cloak Color** field.
      Accepted formats: `#AA3344`, `AA3344`, or `170,51,68` (decimal 0–255).
-   - The `cloakColors` / `avoidColors` entries in `cloak_palette.json` only define which texels the shader treats as cloak vs protected — they are not the same as this tint preset.
 4. Load a save or join a multiplayer server — your cloak will be tinted immediately, and every
    other SSMP player with this mod installed will see the same color on your Hornet.
 
@@ -48,46 +47,24 @@ updates. You'll still see their vanilla cloaks correctly.
 
 ### `cloak_palette.json`
 
-Shipped next to `HornetCloakColor.dll`. It tells the cloak shader which **source** colors in the
-sprite count as the cloak (so only those pixels are recolored to your preset). You normally do
-not need to edit it.
+Shipped next to `HornetCloakColor.dll`. Runtime masking is driven by `CloakMasks/`; this file only
+controls diagnostics and the player hierarchy rescan cadence. You normally do not need to edit it.
 
 ```json
 {
-  "cloakColors": ["#79404b", "..."],
-  "avoidColors": ["#ffffff", "..."],
-  "matchRadius": 0.135,
-  "avoidMatchRadius": 0.12,
   "debugLogging": false,
-  "collectionNameContains": [],
-  "sceneScanIntervalFrames": 3
+  "mapIconDebugLogging": false,
+  "heroMeshRescanIntervalFrames": 30,
+  "dumpDiscoveredTextures": false
 }
 ```
 
-(Full default lists are in [`Config/cloak_palette.json`](./Config/cloak_palette.json) in the repo.)
-
-- `cloakColors`: reference hex colors from the vanilla atlases. Up to **16** entries.
-  Texels close to **any** of them count as cloak. Add more hexes if a specific animation
-  (recoil from a steam vent, dive, dash, etc.) still shows the original red — sample the
-  cloak pixels from the matching atlas in an image editor and append them here.
-- `avoidColors`: optional; up to **16** hex colors. Texels close to **any** of these in RGB get
-  their recolor **mask reduced** (same smoothstep idea as matching, using `avoidMatchRadius`),
-  so skin, metal trim, etc. can stay vanilla even if they sit near a cloak reference. Leave
-  empty `[]` if you do not need masking.
-- `matchRadius`: how far a pixel may deviate in RGB space and still count as cloak (roughly 0.05–0.35).
-  Raise slightly if some cloak pixels are missed after a game update.
-- `avoidMatchRadius`: same scale as `matchRadius`, used only for the avoid list. If omitted, it
-  defaults to whatever `matchRadius` is after loading the file.
 - `debugLogging`: when `true`, logs extra lines (e.g. each cloak color change, how many
-  reference colors loaded, and which scene textures the scanner is matching/ignoring).
+  scene textures the scanner is matching/ignoring).
   Default `false`.
-- `collectionNameContains`: the **only** way the scene-wide orphan scanner matches sprites
-  (OR between substrings against `tk2dSprite.Collection.name`). Tune using `debugLogging`
-  log lines (`collection=`). There is no texture registry or other fuzzy mode for the scanner.
-- `sceneScanIntervalFrames`: how often (in frames) the scanner runs `FindObjectsByType`
-  to refresh its cache of orphan renderers. Tint is still applied **every** `LateUpdate` to
-  that cache (so FX/HUD do not flicker when tk2d resets materials). `1` = rescan every frame;
-  `3` is a good default. Higher = cheaper; new orphans may take up to N−1 frames to join the cache.
+- `mapIconDebugLogging`: logs SSMP map/compass icon synchronization without enabling all cloak logs.
+- `heroMeshRescanIntervalFrames`: how often the player hierarchy cache is refreshed.
+- `dumpDiscoveredTextures`: when `true`, writes the source atlas beside the first matching mask.
 
 If the file is missing or invalid, the built-in defaults are used.
 
@@ -116,24 +93,26 @@ A `thunderstore/dist/*.zip` is produced automatically alongside the compiled DLL
 ## How it works
 
 - A small `CloakRecolor` MonoBehaviour is attached to each player's root GameObject (local hero
-  and SSMP-spawned remote players). Every `LateUpdate` it walks **all** `MeshRenderer`s under
-  that object (`GetComponentsInChildren`, including **inactive** children). Some animations use
-  extra meshes or toggled child objects; only updating the root renderer missed those frames.
+  and SSMP-spawned remote players). It caches the player hierarchy's `MeshRenderer`s and
+  refreshes that cache every `heroMeshRescanIntervalFrames` (default 30) so newly toggled
+  child objects (some animations use extra meshes or inactive children) are picked up. Per
+  `LateUpdate` it just iterates the cache and calls the memoized applier (see below).
 - A scene-wide `CloakSceneScanner` runs on its own GameObject (DontDestroyOnLoad) at a high
-  script-execution order. Every few frames it iterates `tk2dSprite`s and applies the local
-  cloak pass when a sprite matches the **allowlist** in `cloak_palette.json` (case-insensitive
-  substrings on tk2d collection name, `Texture.name`, and/or the full transform path; OR
-  between those lists). It covers renderers **outside** the player hierarchy (steam-vent
-  recoil, item-get pose, etc.). `CloakRecolor` ancestors are skipped so remote players keep
-  their own colors. To discover substrings, enable `debugLogging` or
-  use [Silksong AssetHelper](https://github.com/silksong-modding/Silksong.AssetHelper)
-  `DebugTools.DumpAllAssetNames` and search the output — bundle **asset** paths are not the same
-  as in-game `atlas0` names, and the AssetHelper in-repo test JSONs are not a player-atlas list.
+  script-execution order. **Discovery** (`FindObjectsByType<tk2dSprite>` + filtering) only runs
+  on `SceneManager.activeSceneChanged` and on a slow trickle (every ~2 s) for late-spawned
+  sprites — *not* per frame. Per `LateUpdate` the scanner just walks its cached eligible-
+  renderer list and calls the memoized applier. It covers renderers **outside** the player
+  hierarchy (steam-vent recoil, item-get pose, etc.). Renderers under a `CloakRecolor` and
+  compass icons are skipped so remote players keep their own colors.
+- **Memoized applier**: `CloakMaterialApplier` caches per-renderer state (last `sharedMaterial`
+  instance ID + applied mode + color). When tk2d swaps a renderer's material mid-animation the
+  instance ID changes and we redo the work; otherwise the call is a single dict lookup and
+  early return — `SetTexture` / `SetFloat` are *not* re-pushed every frame. Scene transitions,
+  palette reloads, and color changes all invalidate the cache so freshly bound materials get
+  the slow path on first sight.
 - **Sprite sheets / atlases:** Hornet’s art can live in multiple atlases (e.g. idle vs sprint).
   Recolor weights live in **`CloakMasks/<collection>/<atlas>.png`** (R channel). If a sheet still
-  looks wrong, edit that PNG or tune **`cloak_palette.json`** (`cloakColors`, `avoidColors`,
-  `matchRadius`) and **re-bake** missing masks (GPU `CloakMaskBake` uses those fields; see
-  `Shaders/README.md`).
+  looks wrong, edit that PNG in the repo and rebuild.
 - **Cloak shader path** swaps the renderer's shader for `HornetCloakColor/CloakHueShift` and
   pushes the chosen tint in HSV. The fragment shader reads **only** the R mask texture (no
   per-pixel RGB matching at draw time). The shader is shipped as an `AssetBundle` embedded in the DLL.
@@ -146,13 +125,13 @@ A `thunderstore/dist/*.zip` is produced automatically alongside the compiled DLL
 
 ## Shipped `CloakMasks/`
 
-The repo includes **`CloakMasks/<tk2d collection>/<atlas>.png`** next to the project root (same paths the mod uses under `BepInEx/plugins/HornetCloakColor/`). These files are **version-controlled**, copied into the build output with the DLL, and included in Thunderstore zips. Update them in the repo when you tune masks; the game can still write new PNGs next to the DLL when an atlas has no mask yet (GPU bake from `cloak_palette.json`).
+The repo includes **`CloakMasks/<tk2d collection>/<atlas>.png`** next to the project root (same paths the mod uses under `BepInEx/plugins/HornetCloakColor/`). These files are **version-controlled**, copied into the build output with the DLL, and included in Thunderstore zips. Update them in the repo when you tune masks; the game no longer writes missing masks at runtime.
 
 ## Baking the shader bundle
 
-The cloak-only path requires `Resources/cloakshader.bundle` (embeds **CloakHueShift** and **CloakMaskBake**).
+The cloak-only path requires `Resources/cloakshader.bundle` (embeds **CloakHueShift**).
 It's gitignored, so contributors need to bake it in Unity once. See [Shaders/README.md](./Shaders/README.md)
-for step-by-step instructions (TL;DR: open Unity 6000.0.50, drop both `.shader` files and the editor script in,
+for step-by-step instructions (TL;DR: open Unity 6000.0.50, drop the shader and editor script in,
 **HornetCloakColor → Build Shader Bundle**, copy the output to `Resources/`).
 
 If the bundle isn't present the build still succeeds and the mod gracefully falls back to

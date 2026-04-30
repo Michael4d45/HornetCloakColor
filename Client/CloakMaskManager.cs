@@ -10,14 +10,14 @@ namespace HornetCloakColor.Client
     /// <summary>
     /// Per-atlas R masks under <c>CloakMasks/&lt;tk2d collection name&gt;/&lt;MainTex.name&gt;.png</c>
     /// next to the plugin DLL (legacy flat <c>CloakMasks/&lt;MainTex.name&gt;.png</c> is still loaded if present).
-    /// Weights drive the in-game cloak shader; missing files are GPU-baked once (see <c>CloakMaskBake</c>) and saved for hand-editing.
+    /// Weights drive the in-game cloak shader; missing files mean that atlas is left untouched.
     /// </summary>
     internal static class CloakMaskManager
     {
         /// <summary>Canonical key: <c>CloakMasks/&lt;collection&gt;/&lt;texture&gt;.png</c> (full path).</summary>
         private static readonly Dictionary<string, Texture2D> ByMaskFilePath = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly HashSet<string> MissingMaskFilePaths = new(StringComparer.OrdinalIgnoreCase);
         private static string? _pluginDir;
-        private static bool _warnedMissingBakeShader;
         private static Texture2D? _blackWeight1x1;
         private static readonly HashSet<string> DumpedOriginalPaths = new(StringComparer.OrdinalIgnoreCase);
 
@@ -45,7 +45,12 @@ namespace HornetCloakColor.Client
             }
 
             ByMaskFilePath.Clear();
+            MissingMaskFilePaths.Clear();
             DumpedOriginalPaths.Clear();
+
+            // Mask Texture2D instance IDs change after a reload; force every memoized renderer
+            // to take the slow path on its next Apply so it picks up the new (or now-missing) mask.
+            CloakMaterialApplier.InvalidateAll();
         }
 
         private static string PluginDir
@@ -60,39 +65,37 @@ namespace HornetCloakColor.Client
         }
 
         /// <summary>
-        /// Returns a linear <see cref="Texture2D"/> mask for <paramref name="mainTex"/> (disk, cache, or GPU bake).
-        /// On failure (no atlas, bake shader missing, etc.) returns <see cref="BlackWeightMask"/> so tint weight is zero.
+        /// Returns a linear <see cref="Texture2D"/> mask for <paramref name="mainTex"/> if one exists on disk.
+        /// Missing or invalid masks return <c>false</c> so callers can leave that renderer untouched.
         /// </summary>
         /// <param name="tk2dCollectionName"><c>tk2dSprite.Collection.name</c> for on-disk layout (sanitized folder).</param>
-        public static Texture2D GetMaskForMainTexture(Texture? mainTex, string? tk2dCollectionName)
+        public static bool TryGetMaskForMainTexture(Texture? mainTex, string? tk2dCollectionName, out Texture2D mask)
         {
+            mask = BlackWeightMask;
+
             if (mainTex == null || string.IsNullOrEmpty(PluginDir))
-                return BlackWeightMask;
+                return false;
 
             if (mainTex.width <= 0 || mainTex.height <= 0)
-                return BlackWeightMask;
+                return false;
 
             var collectionStem = CloakDiskNames.CollectionFolder(tk2dCollectionName);
             var texStem = CloakDiskNames.SanitizeFileStem(
                 string.IsNullOrEmpty(mainTex.name) ? $"tex_{mainTex.GetInstanceID()}" : mainTex.name);
 
             var masksDir = Path.Combine(PluginDir, "CloakMasks");
-            try
-            {
-                Directory.CreateDirectory(masksDir);
-            }
-            catch (Exception ex)
-            {
-                Log.Warn($"[CloakMasks] Could not create '{masksDir}': {ex.Message}");
-                return BlackWeightMask;
-            }
-
             var collectionDir = Path.Combine(masksDir, collectionStem);
             var preferredPath = Path.Combine(collectionDir, $"{texStem}.png");
             var legacyFlatPath = Path.Combine(masksDir, $"{texStem}.png");
 
             if (ByMaskFilePath.TryGetValue(preferredPath, out var cached) && cached != null)
-                return cached;
+            {
+                mask = cached;
+                return true;
+            }
+
+            if (MissingMaskFilePaths.Contains(preferredPath))
+                return false;
 
             Texture2D? maskTex = null;
             string? resolvedPath = null;
@@ -117,21 +120,8 @@ namespace HornetCloakColor.Client
 
             if (maskTex == null)
             {
-                maskTex = GenerateProceduralMask(mainTex);
-                if (maskTex == null)
-                    return BlackWeightMask;
-
-                try
-                {
-                    Directory.CreateDirectory(collectionDir);
-                    File.WriteAllBytes(preferredPath, maskTex.EncodeToPNG());
-                    Log.Info($"[CloakMasks] Wrote auto-generated mask '{preferredPath}' (collection '{tk2dCollectionName ?? "(none)"}', atlas '{mainTex.name}'). " +
-                             "Edit the PNG (R channel = recolor weight) and restart to pick up changes.");
-                }
-                catch (Exception ex)
-                {
-                    Log.Warn($"[CloakMasks] Could not save '{preferredPath}': {ex.Message}. Using in-memory mask for this session.");
-                }
+                MissingMaskFilePaths.Add(preferredPath);
+                return false;
             }
 
             maskTex.wrapMode = TextureWrapMode.Clamp;
@@ -142,11 +132,12 @@ namespace HornetCloakColor.Client
             var maskPathForDump = resolvedPath ?? preferredPath;
             MaybeDumpDiscoveredSourceTexture(mainTex, maskPathForDump);
 
-            return maskTex;
+            mask = maskTex;
+            return true;
         }
 
         /// <summary>
-        /// Writes <c>&lt;mask-stem&gt;-original.png</c> beside the mask (or canonical mask folder when baked).
+        /// Writes <c>&lt;mask-stem&gt;-original.png</c> beside the mask.
         /// </summary>
         private static void MaybeDumpDiscoveredSourceTexture(Texture mainTex, string siblingMaskPath)
         {
@@ -214,65 +205,5 @@ namespace HornetCloakColor.Client
             }
         }
 
-        /// <summary>
-        /// Bakes the procedural mask using <see cref="CloakShaderManager.MaskBakeShader"/> (same math as the in-game
-        /// cloak shader). CPU readback was unreliable for compressed atlases; this path matches the GPU exactly.
-        /// </summary>
-        private static Texture2D? GenerateProceduralMask(Texture mainTex)
-        {
-            if (CloakPaletteConfig.SrcCount <= 0)
-            {
-                Log.Warn("[CloakMasks] cloakColors produced SrcCount=0 — cannot generate a mask; fix cloak_palette.json.");
-                return null;
-            }
-
-            var bakeShader = CloakShaderManager.MaskBakeShader;
-            if (bakeShader == null)
-            {
-                if (!_warnedMissingBakeShader)
-                {
-                    _warnedMissingBakeShader = true;
-                    Log.Warn("[CloakMasks] CloakMaskBake shader is missing from the embedded bundle — cannot write mask PNGs. " +
-                             "Rebuild cloakshader.bundle in Unity (include CloakMaskBake.shader; see Shaders/README.md), " +
-                             "copy to HornetCloakColor/Resources/cloakshader.bundle, then rebuild the mod DLL.");
-                }
-
-                return null;
-            }
-
-            var w = mainTex.width;
-            var h = mainTex.height;
-            if (w <= 0 || h <= 0) return null;
-
-            var mat = new Material(bakeShader);
-            var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
-            var prev = RenderTexture.active;
-            try
-            {
-                mat.SetVectorArray(CloakShaderManager.SrcColorsId, CloakPaletteConfig.SrcColors);
-                mat.SetVectorArray(CloakShaderManager.AvoidColorsId, CloakPaletteConfig.AvoidColors);
-                mat.SetFloat(CloakShaderManager.MatchRadiusId, CloakPaletteConfig.MatchRadius);
-                mat.SetFloat(CloakShaderManager.AvoidMatchRadiusId, CloakPaletteConfig.AvoidMatchRadius);
-                mat.SetFloat(CloakShaderManager.StrengthId, 1f);
-
-                Graphics.Blit(mainTex, rt, mat);
-                RenderTexture.active = rt;
-                var dst = new Texture2D(w, h, TextureFormat.RGBA32, false, true);
-                dst.ReadPixels(new Rect(0, 0, w, h), 0, 0);
-                dst.Apply(false, false);
-                return dst;
-            }
-            catch (Exception ex)
-            {
-                Log.Warn($"[CloakMasks] GPU mask bake failed for '{mainTex.name}': {ex.Message}");
-                return null;
-            }
-            finally
-            {
-                RenderTexture.active = prev;
-                RenderTexture.ReleaseTemporary(rt);
-                UnityEngine.Object.Destroy(mat);
-            }
-        }
     }
 }

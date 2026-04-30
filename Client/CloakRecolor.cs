@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Diagnostics;
 using HornetCloakColor.Shared;
 using UnityEngine;
 
@@ -12,8 +11,8 @@ namespace HornetCloakColor.Client
     /// touching the root missed those frames.
     ///
     /// This component owns the renderers in its own hierarchy. <see cref="CloakSceneScanner"/>
-    /// applies the same cloak treatment to orphan <c>tk2dSprite</c>s that match the
-    /// allowlist in <c>cloak_palette.json</c> (separate from this hierarchy).
+    /// applies the same cloak treatment to orphan <c>tk2dSprite</c>s whose atlases have
+    /// mask PNGs under <c>CloakMasks/</c>.
     ///
     /// Mesh renderers are cached and the hierarchy is re-scanned every
     /// <see cref="CloakPaletteConfig.HeroMeshRescanIntervalFrames"/> (default 30) instead of every frame,
@@ -39,18 +38,7 @@ namespace HornetCloakColor.Client
         {
             CloakMaterialApplier.PruneDestroyed(_originalShaderByRenderer);
             MaybeRefreshMeshCache();
-
-            if (PerfDiagnostics.Enabled)
-            {
-                var sw = Stopwatch.StartNew();
-                ApplyToCachedMeshRenderersCore();
-                sw.Stop();
-                PerfDiagnostics.RecordRecolorLateUpdate(gameObject.name, _meshCache.Count, sw.Elapsed.TotalMilliseconds);
-            }
-            else
-            {
-                ApplyToCachedMeshRenderersCore();
-            }
+            ApplyToCachedMeshRenderersCore();
         }
 
         public void Configure(CloakColor color, bool useCloakShader)

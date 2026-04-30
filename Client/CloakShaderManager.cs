@@ -13,27 +13,18 @@ namespace HornetCloakColor.Client
     {
         private const string ShaderName = "HornetCloakColor/CloakHueShift";
         private const string ShaderAssetName = "CloakHueShift";
-        private const string MaskBakeShaderName = "HornetCloakColor/CloakMaskBake";
-        private const string MaskBakeAssetName = "CloakMaskBake";
 
         private const string ResourceName = "HornetCloakColor.Resources.cloakshader.bundle";
 
         private static AssetBundle? _bundle;
         private static Shader? _shader;
-        private static Shader? _maskBakeShader;
-
-        public const int MaxCloakColors = 16;
-        public const int MaxAvoidColors = 16;
 
         public static readonly int TargetHueId = Shader.PropertyToID("_TargetHue");
         public static readonly int TargetSatId = Shader.PropertyToID("_TargetSat");
         public static readonly int TargetValId = Shader.PropertyToID("_TargetVal");
-        public static readonly int SrcColorsId = Shader.PropertyToID("_SrcColors");
-        public static readonly int AvoidColorsId = Shader.PropertyToID("_AvoidColors");
-        public static readonly int MatchRadiusId = Shader.PropertyToID("_MatchRadius");
-        public static readonly int AvoidMatchRadiusId = Shader.PropertyToID("_AvoidMatchRadius");
         public static readonly int StrengthId = Shader.PropertyToID("_Strength");
         public static readonly int CloakMaskTexId = Shader.PropertyToID("_CloakMaskTex");
+        public static readonly int MainTexId = Shader.PropertyToID("_MainTex");
 
         /// <summary>The loaded cloak-tint shader, or null if the bundle is unavailable.</summary>
         public static Shader? Shader
@@ -42,19 +33,6 @@ namespace HornetCloakColor.Client
             {
                 EnsureInitialized();
                 return _shader;
-            }
-        }
-
-        /// <summary>
-        /// GPU-only mask bake shader (same mask math as <see cref="Shader"/>). Null if the embedded bundle
-        /// predates <c>CloakMaskBake.shader</c> — rebuild the bundle from the Unity editor menu.
-        /// </summary>
-        public static Shader? MaskBakeShader
-        {
-            get
-            {
-                EnsureInitialized();
-                return _maskBakeShader;
             }
         }
 
@@ -102,8 +80,6 @@ namespace HornetCloakColor.Client
             else
                 Log.Warn($"Cloak shader not found in embedded bundle (expected '{ShaderAssetName}' or '{ShaderName}'). " +
                          "Rebuild the bundle from Shaders/.");
-
-            _maskBakeShader = TryLoadMaskBake(_bundle);
         }
 
         private static Shader? TryLoadCloakHueShift(AssetBundle bundle)
@@ -123,22 +99,6 @@ namespace HornetCloakColor.Client
             }
 
             return all.Length == 1 ? all[0] : null;
-        }
-
-        private static Shader? TryLoadMaskBake(AssetBundle bundle)
-        {
-            var s = bundle.LoadAsset<Shader>(MaskBakeAssetName);
-            if (s != null) return s;
-
-            s = bundle.LoadAsset<Shader>(MaskBakeShaderName);
-            if (s != null) return s;
-
-            foreach (var sh in bundle.LoadAllAssets<Shader>())
-            {
-                if (sh != null && sh.name == MaskBakeShaderName) return sh;
-            }
-
-            return null;
         }
     }
 }
