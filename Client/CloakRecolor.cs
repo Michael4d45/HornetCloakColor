@@ -110,9 +110,6 @@ namespace HornetCloakColor.Client
                     continue;
                 }
 
-                if (IsUnderSsmpUsernameObject(meshRenderer.transform))
-                    continue;
-
                 var shared = meshRenderer.sharedMaterial;
                 if (shared != null)
                 {

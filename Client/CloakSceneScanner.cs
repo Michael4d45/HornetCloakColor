@@ -35,6 +35,8 @@ namespace HornetCloakColor.Client
         private readonly HashSet<int> _loggedTextureIds = new();
         private readonly HashSet<int> _loggedRendererIds = new();
 
+        private readonly HashSet<int> _knownNonHornetTextureIds = new();
+
         private int _frameCounter;
 
         public static void EnsureCreated()
@@ -43,6 +45,21 @@ namespace HornetCloakColor.Client
             var go = new GameObject("HornetCloakColorSceneScanner");
             DontDestroyOnLoad(go);
             Instance = go.AddComponent<CloakSceneScanner>();
+        }
+
+        private void OnEnable()
+        {
+            UnityEngine.SceneManagement.SceneManager.activeSceneChanged += OnSceneChanged;
+        }
+
+        private void OnDisable()
+        {
+            UnityEngine.SceneManagement.SceneManager.activeSceneChanged -= OnSceneChanged;
+        }
+
+        private void OnSceneChanged(UnityEngine.SceneManagement.Scene from, UnityEngine.SceneManagement.Scene to)
+        {
+            _knownNonHornetTextureIds.Clear();
         }
 
         public static void SetColor(CloakColor color)
@@ -132,15 +149,9 @@ namespace HornetCloakColor.Client
                 if (IsCompassIcon(renderer.transform))
                     continue;
 
-                var texName = tex.name;
+                var texId = tex.GetInstanceID();
 
-                // Primary match: this exact atlas instance has been seen on a known-Hornet
-                // renderer. Reliable because instance IDs are unique per asset, even when
-                // many unrelated atlases share the name "atlas0".
-                //
-                // Shared atlas textures also appear on VFX / HUD / sprite-cache objects; those
-                // paths are filtered out via SceneScanRegistryDenyPathContains so we do not
-                // recolor unrelated tk2d sprites that happen to share the same Texture instance.
+                // Fast path: registry hit: skip every substring check below.
                 string? path = null;
                 var registryHit = HornetTextureRegistry.Contains(tex);
                 var instanceMatch = registryHit;
@@ -151,11 +162,16 @@ namespace HornetCloakColor.Client
                         instanceMatch = false;
                 }
 
-                // Fallback 1: texture name substring (rarely useful — Silksong's Hornet
-                // atlases are named atlas0/atlas1/etc., shared with many unrelated atlases).
-                var nameMatch = !instanceMatch
-                                && nameFilters != null && nameFilters.Length > 0
-                                && MatchesAnyFilter(texName, nameFilters);
+                if (!instanceMatch && _knownNonHornetTextureIds.Contains(texId))
+                    continue;
+
+                string? texName = null;
+                var nameMatch = false;
+                if (!instanceMatch && nameFilters != null && nameFilters.Length > 0)
+                {
+                    texName = tex.name;
+                    nameMatch = MatchesAnyFilter(texName, nameFilters);
+                }
 
                 // Fallback 2: GameObject path substring. The bed/sit poses live under
                 // scene-specific GameObjects whose name contains "Hornet" but whose atlas
@@ -164,29 +180,33 @@ namespace HornetCloakColor.Client
                 if (!instanceMatch && !nameMatch
                     && pathFilters != null && pathFilters.Length > 0)
                 {
-                    path = GetPath(renderer.transform);
+                    path ??= GetPath(renderer.transform);
                     pathMatch = MatchesAnyFilter(path, pathFilters);
                 }
 
                 if (!instanceMatch && !nameMatch && !pathMatch)
                 {
-                    if (CloakPaletteConfig.DebugLogging && _loggedTextureIds.Add(tex.GetInstanceID()))
+                    _knownNonHornetTextureIds.Add(texId);
+
+                    if (CloakPaletteConfig.DebugLogging && _loggedTextureIds.Add(texId))
                     {
+                        texName ??= tex.name;
                         path ??= GetPath(renderer.transform);
                         Log.Info($"[Scanner] Ignored texture (no match): {texName} " +
-                                 $"(id={tex.GetInstanceID()}) on '{path}'");
+                                 $"(id={texId}) on '{path}'");
                     }
                     continue;
                 }
 
                 if (CloakPaletteConfig.DebugLogging && _loggedRendererIds.Add(renderer.GetInstanceID()))
                 {
+                    texName ??= tex.name;
                     path ??= GetPath(renderer.transform);
                     var via = instanceMatch ? "registry"
                             : nameMatch ? "name-filter"
                             : "path-filter";
                     Log.Info($"[Scanner] Tinting orphan renderer '{path}' " +
-                             $"(tex={texName}, id={tex.GetInstanceID()}, via={via})");
+                             $"(tex={texName}, id={texId}, via={via})");
                 }
 
                 // Promote name/path matches into the registry so subsequent scans hit the
@@ -212,13 +232,12 @@ namespace HornetCloakColor.Client
         // The GameMap (zoomed-in) and InventoryWideMap (overall) compass mask GameObjects
         // are literally named "Compass Icon". SSMP's MapManager.CreatePlayerIcon clones
         // gameMap.compassIcon for every remote player, producing "Compass Icon(Clone)" (and
-        // "Compass Icon(Clone)(Clone)" if the same player's icon is recreated). We match
-        // the prefix so the scanner stays out of all of them.
+        // "Compass Icon(Clone)(Clone)" if the same player's icon is recreated). We match them
+        // by the presence of a MapMaskTint component.
         private static bool IsCompassIcon(Transform t)
         {
             if (t == null) return false;
-            var n = t.name;
-            return n.StartsWith("Compass Icon", StringComparison.Ordinal);
+            return t.GetComponentInParent<MapMaskTint>() != null;
         }
 
         private static bool MatchesAnyFilter(string name, string[] filters)

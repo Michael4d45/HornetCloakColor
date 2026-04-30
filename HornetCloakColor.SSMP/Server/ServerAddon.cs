@@ -48,8 +48,8 @@ namespace HornetCloakColor.Server
 
             serverApi.ServerManager.PlayerEnterSceneEvent += OnPlayerEnterScene;
             serverApi.ServerManager.PlayerDisconnectEvent += OnPlayerDisconnect;
-
-            Log.Info("Server addon initialized.");
+            
+            Logger.Info("Server addon initialized.");
         }
 
         private void OnPlayerEnterScene(IServerPlayer player)
@@ -72,7 +72,7 @@ namespace HornetCloakColor.Server
                 sent++;
             }
 
-            Log.Info($"Seeded {sent} cloak color(s) to newly-arrived player {player.Id}.");
+            Logger.Info($"Seeded {sent} cloak color(s) to newly-arrived player {player.Id}.");
         }
 
         private void OnPlayerDisconnect(IServerPlayer player)

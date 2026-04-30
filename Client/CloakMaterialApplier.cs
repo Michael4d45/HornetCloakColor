@@ -12,6 +12,18 @@ namespace HornetCloakColor.Client
     /// </summary>
     internal static class CloakMaterialApplier
     {
+        private struct AppliedState
+        {
+            public int PaletteVersion;
+            public byte R, G, B;
+            public bool IsDefault; // tracked separately because Default skips the color upload
+            public bool ColorEverApplied;
+        }
+
+        private static readonly Dictionary<int, AppliedState> _appliedByMaterial = new();
+
+        internal static void InvalidateAllAppliedState() => _appliedByMaterial.Clear();
+
         public static void Apply(
             MeshRenderer renderer,
             tk2dSprite? sprite,
@@ -78,24 +90,51 @@ namespace HornetCloakColor.Client
             if (sprite != null && sprite.color != Color.white)
                 sprite.color = Color.white;
 
-            mat.SetVectorArray(CloakShaderManager.SrcColorsId, CloakPaletteConfig.SrcColors);
-            mat.SetVectorArray(CloakShaderManager.AvoidColorsId, CloakPaletteConfig.AvoidColors);
-            mat.SetFloat(CloakShaderManager.MatchRadiusId, CloakPaletteConfig.MatchRadius);
-            mat.SetFloat(CloakShaderManager.AvoidMatchRadiusId, CloakPaletteConfig.AvoidMatchRadius);
+            var matId = mat.GetInstanceID();
+            _appliedByMaterial.TryGetValue(matId, out var state);
 
-            if (color.Equals(CloakColor.Default))
+            var currentVersion = CloakPaletteConfig.Version;
+            var paletteDirty = state.PaletteVersion != currentVersion;
+            if (paletteDirty)
             {
-                // White preset = "no tint": disable the recolor pass and let the vanilla
-                // texture show through (prevents the cloak going off-white/grey).
-                mat.SetFloat(CloakShaderManager.StrengthId, 0f);
-                return;
+                mat.SetVectorArray(CloakShaderManager.SrcColorsId, CloakPaletteConfig.SrcColors);
+                mat.SetVectorArray(CloakShaderManager.AvoidColorsId, CloakPaletteConfig.AvoidColors);
+                mat.SetFloat(CloakShaderManager.MatchRadiusId, CloakPaletteConfig.MatchRadius);
+                mat.SetFloat(CloakShaderManager.AvoidMatchRadiusId, CloakPaletteConfig.AvoidMatchRadius);
+                state.PaletteVersion = currentVersion;
             }
 
-            color.ToHSV(out var h, out var s, out var v);
-            mat.SetFloat(CloakShaderManager.TargetHueId, h);
-            mat.SetFloat(CloakShaderManager.TargetSatId, s <= 0.001f ? 0f : 1.0f);
-            mat.SetFloat(CloakShaderManager.TargetValId, Mathf.Lerp(0.6f, 1.4f, v));
-            mat.SetFloat(CloakShaderManager.StrengthId, 1f);
+            var isDefault = color.Equals(CloakColor.Default);
+            var colorDirty = !state.ColorEverApplied
+                             || state.IsDefault != isDefault
+                             || state.R != color.R
+                             || state.G != color.G
+                             || state.B != color.B;
+
+            if (colorDirty)
+            {
+                if (isDefault)
+                {
+                    mat.SetFloat(CloakShaderManager.StrengthId, 0f);
+                }
+                else
+                {
+                    color.ToHSV(out var h, out var s, out var v);
+                    mat.SetFloat(CloakShaderManager.TargetHueId, h);
+                    mat.SetFloat(CloakShaderManager.TargetSatId, s <= 0.001f ? 0f : 1.0f);
+                    mat.SetFloat(CloakShaderManager.TargetValId, Mathf.Lerp(0.6f, 1.4f, v));
+                    mat.SetFloat(CloakShaderManager.StrengthId, 1f);
+                }
+
+                state.IsDefault = isDefault;
+                state.R = color.R;
+                state.G = color.G;
+                state.B = color.B;
+                state.ColorEverApplied = true;
+            }
+
+            if (paletteDirty || colorDirty)
+                _appliedByMaterial[matId] = state;
         }
 
         private static void ApplyVertexTint(Material mat, tk2dSprite? sprite, CloakColor color)

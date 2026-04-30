@@ -18,6 +18,14 @@ namespace HornetCloakColor.Client
     {
         private static object? _clientManager;
         private static float _nextSyncLogTime;
+        private static System.Type? _cachedClientManagerType;
+        private static System.Reflection.FieldInfo? _cachedMapManagerField;
+        private static System.Type? _cachedMapManagerType;
+        private static System.Reflection.FieldInfo? _cachedDisplayingIconsField;
+        private static System.Reflection.MethodInfo? _cachedUpdateMapIconsActiveMethod;
+        private static readonly object?[] _emptyInvokeArgs = System.Array.Empty<object?>();
+        private static readonly object _boxedTrue = true;
+        private static readonly object _boxedFalse = false;
 
         internal static void RegisterClientManager(object clientManager) => _clientManager = clientManager;
 
@@ -53,9 +61,17 @@ namespace HornetCloakColor.Client
 
             try
             {
-                var mm = _clientManager.GetType()
-                    .GetField("_mapManager", BindingFlags.Instance | BindingFlags.NonPublic)
-                    ?.GetValue(_clientManager);
+                var cmType = _clientManager.GetType();
+                if (!ReferenceEquals(_cachedClientManagerType, cmType))
+                {
+                    _cachedClientManagerType = cmType;
+                    _cachedMapManagerField = cmType.GetField("_mapManager", BindingFlags.Instance | BindingFlags.NonPublic);
+                    _cachedMapManagerType = null;
+                    _cachedDisplayingIconsField = null;
+                    _cachedUpdateMapIconsActiveMethod = null;
+                }
+
+                var mm = _cachedMapManagerField?.GetValue(_clientManager);
                 if (mm == null)
                 {
                     if (CloakPaletteConfig.LogMapIconDiagnostics)
@@ -93,10 +109,15 @@ namespace HornetCloakColor.Client
             try
             {
                 var mmType = mapManager.GetType();
-                mmType.GetField("_displayingIcons", BindingFlags.Instance | BindingFlags.NonPublic)
-                    ?.SetValue(mapManager, showing);
-                mmType.GetMethod("UpdateMapIconsActive", BindingFlags.Instance | BindingFlags.NonPublic)
-                    ?.Invoke(mapManager, null);
+                if (!ReferenceEquals(_cachedMapManagerType, mmType))
+                {
+                    _cachedMapManagerType = mmType;
+                    _cachedDisplayingIconsField = mmType.GetField("_displayingIcons", BindingFlags.Instance | BindingFlags.NonPublic);
+                    _cachedUpdateMapIconsActiveMethod = mmType.GetMethod("UpdateMapIconsActive", BindingFlags.Instance | BindingFlags.NonPublic);
+                }
+
+                _cachedDisplayingIconsField?.SetValue(mapManager, showing ? _boxedTrue : _boxedFalse);
+                _cachedUpdateMapIconsActiveMethod?.Invoke(mapManager, _emptyInvokeArgs);
             }
             catch
             {

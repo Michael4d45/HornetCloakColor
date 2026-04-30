@@ -43,6 +43,12 @@ namespace HornetCloakColor.Client
         public static int SrcCount { get; private set; }
 
         /// <summary>
+        /// Increasing counter bumped whenever any field on this class that
+        /// participates in the cloak shader upload changes.
+        /// </summary>
+        public static int Version { get; private set; }
+
+        /// <summary>
         /// Length-<see cref="CloakShaderManager.MaxAvoidColors"/> — texels close to any of these
         /// in RGB get their recolor mask reduced (e.g. skin, armor). Unused slots use the sentinel.
         /// </summary>
@@ -122,6 +128,7 @@ namespace HornetCloakColor.Client
         public static void Load()
         {
             ApplyDefaults();
+            Version++;
 
             var dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
             if (string.IsNullOrEmpty(dir)) return;
@@ -134,6 +141,7 @@ namespace HornetCloakColor.Client
                     var json = File.ReadAllText(diskPath);
                     if (TryApplyPaletteJson(json))
                     {
+                        Version++;
                         Log.Info($"Loaded cloak palette from {diskPath} ({SrcCount} cloak / {AvoidCount} avoid reference color(s)).");
                         if (MapIconDebugLogging)
                             Log.Info("[MapIcon] mapIconDebugLogging is true — tracing map/compass sync; grep log for \"[MapIcon]\".");
