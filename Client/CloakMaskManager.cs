@@ -24,10 +24,12 @@ namespace HornetCloakColor.Client
         /// Lets the spawn hook + scanner skip string-building for any texture we've seen before.
         /// </summary>
         private static readonly Dictionary<int, Texture2D?> ByTextureInstanceId = new();
+        private static readonly Dictionary<string, Texture2D?> ByTexture2DMaskName = new(StringComparer.OrdinalIgnoreCase);
 
         private static string? _pluginDir;
         private static Texture2D? _blackWeight1x1;
         private static readonly HashSet<string> DumpedOriginalPaths = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly HashSet<string> DumpedTemplatePaths = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>R=0 mask so the tint shader leaves pixels unchanged when no real mask exists.</summary>
         public static Texture2D BlackWeightMask
@@ -55,11 +57,85 @@ namespace HornetCloakColor.Client
             ByMaskFilePath.Clear();
             MissingMaskFilePaths.Clear();
             ByTextureInstanceId.Clear();
+            ByTexture2DMaskName.Clear();
             DumpedOriginalPaths.Clear();
+            DumpedTemplatePaths.Clear();
 
             // Mask Texture2D instance IDs change after a reload; force every memoized renderer
             // to take the slow path on its next Apply so it picks up the new (or now-missing) mask.
             CloakMaterialApplier.InvalidateAll();
+        }
+
+        /// <summary>
+        /// SpriteRenderer fallback masks under <c>CloakMasks/Texture2D/&lt;texture-or-sprite&gt;.png</c>.
+        /// Used for non-tk2d one-off animation textures such as diving-bell bench-grab frames.
+        /// </summary>
+        public static bool TryGetTexture2DMask(Texture? texture, string? spriteName, out Texture2D mask)
+        {
+            mask = BlackWeightMask;
+
+            if (string.IsNullOrEmpty(PluginDir))
+                return false;
+
+            var textureName = texture != null ? texture.name : null;
+            if (TryGetTexture2DMaskByName(textureName, texture, out mask))
+                return true;
+
+            if (!string.Equals(spriteName, textureName, StringComparison.Ordinal)
+                && TryGetTexture2DMaskByName(spriteName, texture, out mask))
+                return true;
+
+            return false;
+        }
+
+        private static bool TryGetTexture2DMaskByName(string? name, Texture? referenceTexture, out Texture2D mask)
+        {
+            mask = BlackWeightMask;
+            if (string.IsNullOrWhiteSpace(name)) return false;
+
+            var stem = CloakDiskNames.SanitizeFileStem(name);
+            var path = Path.Combine(PluginDir, "CloakMasks", "Texture2D", $"{stem}.png");
+
+            if (ByTexture2DMaskName.TryGetValue(path, out var cached))
+            {
+                if (cached == null) return false;
+                mask = cached;
+                return true;
+            }
+
+            if (!File.Exists(path))
+            {
+                ByTexture2DMaskName[path] = null;
+                return false;
+            }
+
+            var maskTex = LoadMaskFromDisk(path);
+            if (maskTex == null)
+            {
+                ByTexture2DMaskName[path] = null;
+                return false;
+            }
+
+            if (referenceTexture != null &&
+                (maskTex.width != referenceTexture.width || maskTex.height != referenceTexture.height))
+            {
+                Log.Warn($"[CloakMasks] '{path}' size {maskTex.width}x{maskTex.height} does not match texture " +
+                         $"'{referenceTexture.name}' ({referenceTexture.width}x{referenceTexture.height}). Ignoring this SpriteRenderer mask.");
+                UnityEngine.Object.Destroy(maskTex);
+                ByTexture2DMaskName[path] = null;
+                return false;
+            }
+
+            maskTex.wrapMode = TextureWrapMode.Clamp;
+            maskTex.filterMode = FilterMode.Bilinear;
+            maskTex.name = $"CloakMask:Texture2D/{stem}";
+            ByTexture2DMaskName[path] = maskTex;
+
+            if (referenceTexture != null)
+                MaybeDumpDiscoveredTextureFiles(referenceTexture, path, createEmptyMask: false);
+
+            mask = maskTex;
+            return true;
         }
 
         private static string PluginDir
@@ -144,6 +220,7 @@ namespace HornetCloakColor.Client
 
             if (maskTex == null)
             {
+                MaybeDumpDiscoveredTextureFiles(mainTex, preferredPath, createEmptyMask: true);
                 MissingMaskFilePaths.Add(preferredPath);
                 ByTextureInstanceId[texId] = null;
                 return false;
@@ -156,32 +233,41 @@ namespace HornetCloakColor.Client
             ByTextureInstanceId[texId] = maskTex;
 
             var maskPathForDump = resolvedPath ?? preferredPath;
-            MaybeDumpDiscoveredSourceTexture(mainTex, maskPathForDump);
+            MaybeDumpDiscoveredTextureFiles(mainTex, maskPathForDump, createEmptyMask: false);
 
             mask = maskTex;
             return true;
         }
 
         /// <summary>
-        /// Writes <c>&lt;mask-stem&gt;-original.png</c> beside the mask.
+        /// When <c>dumpDiscoveredTextures</c> is enabled, writes the source atlas beside the
+        /// desired mask path as <c>&lt;atlas&gt;-original.png</c>. For missing masks, also writes
+        /// an empty transparent <c>&lt;atlas&gt;.png</c> template so the user can paint it in-place.
         /// </summary>
-        private static void MaybeDumpDiscoveredSourceTexture(Texture mainTex, string siblingMaskPath)
+        private static void MaybeDumpDiscoveredTextureFiles(Texture mainTex, string maskPath, bool createEmptyMask)
         {
             if (!CloakPaletteConfig.DumpDiscoveredTextures)
                 return;
 
-            var dir = Path.GetDirectoryName(siblingMaskPath);
-            var maskStem = Path.GetFileNameWithoutExtension(siblingMaskPath);
+            var dir = Path.GetDirectoryName(maskPath);
+            var maskStem = Path.GetFileNameWithoutExtension(maskPath);
             if (string.IsNullOrEmpty(dir) || string.IsNullOrEmpty(maskStem))
-                return;
-
-            var outPath = Path.Combine(dir, $"{maskStem}-original.png");
-            if (DumpedOriginalPaths.Contains(outPath) || File.Exists(outPath))
                 return;
 
             var w = mainTex.width;
             var h = mainTex.height;
             if (w <= 0 || h <= 0)
+                return;
+
+            Directory.CreateDirectory(dir);
+            MaybeWriteOriginalTexture(mainTex, Path.Combine(dir, $"{maskStem}-original.png"), w, h);
+            if (createEmptyMask)
+                MaybeWriteEmptyMask(maskPath, w, h);
+        }
+
+        private static void MaybeWriteOriginalTexture(Texture mainTex, string outPath, int w, int h)
+        {
+            if (DumpedOriginalPaths.Contains(outPath) || File.Exists(outPath))
                 return;
 
             var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
@@ -193,7 +279,6 @@ namespace HornetCloakColor.Client
                 var dst = new Texture2D(w, h, TextureFormat.RGBA32, false, true);
                 dst.ReadPixels(new Rect(0, 0, w, h), 0, 0);
                 dst.Apply(false, false);
-                Directory.CreateDirectory(dir);
                 File.WriteAllBytes(outPath, dst.EncodeToPNG());
                 DumpedOriginalPaths.Add(outPath);
                 Log.Info($"[CloakMasks] dumpDiscoveredTextures: wrote '{outPath}'.");
@@ -207,6 +292,28 @@ namespace HornetCloakColor.Client
             {
                 RenderTexture.active = prev;
                 RenderTexture.ReleaseTemporary(rt);
+            }
+        }
+
+        private static void MaybeWriteEmptyMask(string maskPath, int w, int h)
+        {
+            if (DumpedTemplatePaths.Contains(maskPath) || File.Exists(maskPath))
+                return;
+
+            try
+            {
+                var mask = new Texture2D(w, h, TextureFormat.RGBA32, false, true);
+                var pixels = new Color32[w * h];
+                mask.SetPixels32(pixels);
+                mask.Apply(false, false);
+                File.WriteAllBytes(maskPath, mask.EncodeToPNG());
+                DumpedTemplatePaths.Add(maskPath);
+                Log.Info($"[CloakMasks] dumpDiscoveredTextures: wrote empty mask template '{maskPath}'.");
+                UnityEngine.Object.Destroy(mask);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"[CloakMasks] dumpDiscoveredTextures: could not write empty mask '{maskPath}': {ex.Message}");
             }
         }
 

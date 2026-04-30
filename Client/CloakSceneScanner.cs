@@ -250,13 +250,32 @@ namespace HornetCloakColor.Client
         /// </summary>
         private IEnumerator RebuildEligibleCacheCo()
         {
-            // Defer the first batch by one frame so we never share the scene-load frame with the
-            // discovery walk; the game's own scene-init work already pegs that frame.
+            var sw = Stopwatch.StartNew();
+
+            // SpriteRenderer masks are rare and often appear as pre-existing scene objects
+            // (e.g. diving-bell bench-grab). Scan them first so Texture2D-masked sprites don't
+            // wait behind the larger tk2d discovery pass.
+            var spriteRenderers = FindObjectsByType<SpriteRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            if (spriteRenderers != null)
+            {
+                foreach (var spriteRenderer in spriteRenderers)
+                {
+                    if (spriteRenderer != null)
+                        CloakSpriteRendererTint.Watch(spriteRenderer);
+
+                    if (sw.Elapsed.TotalMilliseconds > RebuildBudgetMs)
+                    {
+                        yield return null;
+                        sw.Restart();
+                    }
+                }
+            }
+
+            // Defer the heavier tk2d pass by one frame if the SpriteRenderer pass did not
+            // already yield, so we avoid piling all discovery work onto scene-load frames.
             yield return null;
 
             var sprites = FindObjectsByType<tk2dSprite>(FindObjectsSortMode.None);
-            var sw = Stopwatch.StartNew();
-
             if (sprites != null)
             {
                 foreach (var sprite in sprites)

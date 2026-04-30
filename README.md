@@ -64,7 +64,9 @@ controls diagnostics and the player hierarchy rescan cadence. You normally do no
   Default `false`.
 - `mapIconDebugLogging`: logs SSMP map/compass icon synchronization without enabling all cloak logs.
 - `heroMeshRescanIntervalFrames`: how often the player hierarchy cache is refreshed.
-- `dumpDiscoveredTextures`: when `true`, writes the source atlas beside the first matching mask.
+- `dumpDiscoveredTextures`: when `true`, writes the source atlas beside each discovered mask path
+  as `<atlas>-original.png`. If a mask is missing, it also writes an empty transparent
+  `<atlas>.png` template in the correct `CloakMasks/<collection>/` folder so you can paint it.
 
 If the file is missing or invalid, the built-in defaults are used.
 
@@ -116,6 +118,10 @@ A `thunderstore/dist/*.zip` is produced automatically alongside the compiled DLL
 - **Cloak shader path** swaps the renderer's shader for `HornetCloakColor/CloakHueShift` and
   pushes the chosen tint in HSV. The fragment shader reads **only** the R mask texture (no
   per-pixel RGB matching at draw time). The shader is shipped as an `AssetBundle` embedded in the DLL.
+- **Standalone SpriteRenderer frames** are supported only when a mask exists under
+  `CloakMasks/Texture2D/<texture-or-sprite>.png`. This covers non-tk2d one-off animation
+  frames such as the diving-bell bench-grab sequence without widening the scanner to every UI
+  SpriteRenderer.
 - **Fallback** (when the shader bundle isn't present) tints the whole character via the
   `tk2dSprite` vertex color and the `MeshRenderer` material color.
 - Color updates are serialized as a 5-byte packet (player ID + RGB) and sent through the
@@ -125,7 +131,12 @@ A `thunderstore/dist/*.zip` is produced automatically alongside the compiled DLL
 
 ## Shipped `CloakMasks/`
 
-The repo includes **`CloakMasks/<tk2d collection>/<atlas>.png`** next to the project root (same paths the mod uses under `BepInEx/plugins/HornetCloakColor/`). These files are **version-controlled**, copied into the build output with the DLL, and included in Thunderstore zips. Update them in the repo when you tune masks; the game no longer writes missing masks at runtime.
+The repo includes **`CloakMasks/<tk2d collection>/<atlas>.png`** and a small number of
+**`CloakMasks/Texture2D/<texture-or-sprite>.png`** standalone SpriteRenderer masks next to the
+project root (same paths the mod uses under `BepInEx/plugins/HornetCloakColor/`). These files
+are **version-controlled**, copied into the build output with the DLL, and included in
+Thunderstore zips. Update them in the repo when you tune masks; the game only writes missing
+templates when `dumpDiscoveredTextures` is enabled.
 
 ## Baking the shader bundle
 

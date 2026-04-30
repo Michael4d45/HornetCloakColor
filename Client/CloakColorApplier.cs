@@ -25,6 +25,7 @@ namespace HornetCloakColor.Client
         public static void SetLocalSceneColor(CloakColor color)
         {
             CloakSceneScanner.SetColor(color);
+            CloakSpriteRendererTint.SetColor(color);
         }
     }
 }

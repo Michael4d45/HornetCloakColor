@@ -8,6 +8,6 @@
   "_comment_heroMesh": "CloakRecolor re-scans the player MeshRenderer list every N frames; material re-apply is still every LateUpdate.",
   "heroMeshRescanIntervalFrames": 30,
 
-  "_comment_dumpTex": "When true, first use of each mask writes the game's mainTexture beside it as <mask-stem>-original.png (skipped if that file already exists).",
+  "_comment_dumpTex": "When true, discovery writes <atlas>-original.png beside the mask path; missing masks also get an empty transparent <atlas>.png template.",
   "dumpDiscoveredTextures": false
 }

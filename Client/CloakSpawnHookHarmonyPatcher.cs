@@ -50,6 +50,7 @@ namespace HornetCloakColor.Client
                 postfix: new HarmonyMethod(AccessTools.Method(typeof(CloakSpawnHookHarmonyPatcher), nameof(Tk2dSprite_Awake_Postfix))));
 
             Log.Info($"Hooked {tk2dType.Name}.Awake (declared on {awake.DeclaringType?.Name ?? "?"}) for spawn-time cloak tint.");
+            CloakSpriteRendererTintPatcher.Apply(harmony);
         }
 
         /// <summary>
