@@ -71,9 +71,18 @@
       <LogicalName>HornetCloakColor.Resources.cloakshader.bundle</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
+  <ItemGroup Condition="Exists('Resources/cloakshaderLinux.bundle')">
+    <EmbeddedResource Include="Resources/cloakshaderLinux.bundle">
+      <LogicalName>HornetCloakColor.Resources.cloakshaderLinux.bundle</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
   <Target Name="WarnIfShaderBundleMissing" BeforeTargets="CoreCompile" Condition="!Exists('Resources/cloakshader.bundle')">
     <Message Importance="High"
              Text="Cloak shader bundle missing at Resources/cloakshader.bundle. Cloak-only mode will fall back to whole-character tint at runtime. See Shaders/README.md to bake one." />
+  </Target>
+  <Target Name="WarnIfLinuxShaderBundleMissing" BeforeTargets="CoreCompile" Condition="!Exists('Resources/cloakshaderLinux.bundle')">
+    <Message Importance="High"
+             Text="Linux cloak shader bundle missing at Resources/cloakshaderLinux.bundle. Linux players will fall back to whole-character tint at runtime. See Shaders/README.md to bake one." />
   </Target>
 
   <Target Name="BuildSSMPSatellite" BeforeTargets="CopyAndPackageMod">

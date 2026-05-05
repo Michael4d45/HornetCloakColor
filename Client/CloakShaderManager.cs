@@ -27,8 +27,9 @@ namespace HornetCloakColor.Client
         /// </summary>
         private const string ShaderAssetName = "CloakHueShift";
 
-        // Resource paths — keep in sync with the EmbeddedResource entry in HornetCloakColor.csproj.
-        private const string ResourceName = "HornetCloakColor.Resources.cloakshader.bundle";
+        // Resource paths — keep in sync with the EmbeddedResource entries in HornetCloakColor.csproj.
+        private const string ResourceNameWindows = "HornetCloakColor.Resources.cloakshader.bundle";
+        private const string ResourceNameLinux = "HornetCloakColor.Resources.cloakshaderLinux.bundle";
 
         private static bool _attemptedLoad;
         private static AssetBundle? _bundle;
@@ -67,11 +68,32 @@ namespace HornetCloakColor.Client
         private static Shader? LoadShader()
         {
             var asm = Assembly.GetExecutingAssembly();
-            using var stream = asm.GetManifestResourceStream(ResourceName);
+
+            // Platform-preferred resource first, then the other as a fallback.
+            var preferred = Application.platform == RuntimePlatform.LinuxPlayer
+                ? ResourceNameLinux
+                : ResourceNameWindows;
+            var fallback = preferred == ResourceNameLinux
+                ? ResourceNameWindows
+                : ResourceNameLinux;
+
+            var shader = TryLoadShaderFromResource(asm, preferred, isPreferred: true);
+            if (shader != null) return shader;
+
+            shader = TryLoadShaderFromResource(asm, fallback, isPreferred: false);
+            return shader;
+        }
+
+        private static Shader? TryLoadShaderFromResource(Assembly asm, string resourceName, bool isPreferred)
+        {
+            using var stream = asm.GetManifestResourceStream(resourceName);
             if (stream == null)
             {
-                Log.Warn($"Cloak shader bundle not embedded ({ResourceName}). " +
-                         "Cloak-only recolor disabled; falling back to whole-character tint.");
+                if (isPreferred)
+                {
+                    Log.Warn($"Cloak shader bundle not embedded ({resourceName}) for platform {Application.platform}. " +
+                             "Trying fallback bundle; if that also fails the mod will use whole-character tint.");
+                }
                 return null;
             }
 
@@ -79,31 +101,43 @@ namespace HornetCloakColor.Client
             stream.CopyTo(ms);
             ms.Position = 0;
 
+            AssetBundle? bundle;
             try
             {
-                _bundle = AssetBundle.LoadFromMemory(ms.ToArray());
+                bundle = AssetBundle.LoadFromMemory(ms.ToArray());
             }
             catch (System.Exception ex)
             {
-                Log.Error($"Failed to load cloak shader bundle: {ex}");
+                Log.Error($"Failed to load cloak shader bundle '{resourceName}': {ex}");
                 return null;
             }
 
-            if (_bundle == null)
+            if (bundle == null)
             {
-                Log.Warn("AssetBundle.LoadFromMemory returned null for the cloak shader bundle.");
+                Log.Warn($"AssetBundle.LoadFromMemory returned null for cloak shader bundle '{resourceName}'.");
                 return null;
             }
 
-            var shader = TryLoadShaderFromBundle(_bundle);
+            var shader = TryLoadShaderFromBundle(bundle);
             if (shader == null)
             {
-                Log.Warn($"Cloak shader not found in embedded bundle (expected asset name '{ShaderAssetName}' "
+                Log.Warn($"Cloak shader not found in embedded bundle '{resourceName}' (expected asset name '{ShaderAssetName}' "
                          + $"or runtime name '{ShaderName}'). Rebuild the bundle from Shaders/CloakHueShift.shader.");
+                bundle.Unload(true);
                 return null;
             }
 
-            Log.Info($"Loaded cloak shader '{shader.name}' from embedded bundle.");
+            // Verify the shader is actually usable on this platform.
+            if (!shader.isSupported)
+            {
+                Log.Warn($"Cloak shader from '{resourceName}' is not supported on platform {Application.platform} " +
+                         "(no compiled variants for this build target). Falling back.");
+                bundle.Unload(true);
+                return null;
+            }
+
+            _bundle = bundle;
+            Log.Info($"Loaded cloak shader '{shader.name}' from embedded bundle '{resourceName}' for {Application.platform}.");
             return shader;
         }
 
