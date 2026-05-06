@@ -1,0 +1,35 @@
+[config]
+schemaVersion = "0.0.1"
+
+[package]
+namespace = "Michael4d45"
+# max 250 characters
+description = "Change the color of Hornet's cloak. Fully synchronized with other SSMP players."
+
+websiteUrl = "https://github.com/Michael4d45/HornetCloakColor"
+containsNsfwContent = false
+
+# dependencies are specified in the format AuthorName-PackageName = "version".
+# SSMP is intentionally NOT listed: it's an optional integration, install it separately
+# if you want multiplayer cloak sync. The mod runs fine in single-player without it.
+[package.dependencies]
+BepInEx-BepInExPack_Silksong = "5.4.2304"
+silksong_modding-ModMenu = "0.7.2"
+
+
+[build]
+icon = "./icon.png"
+readme = "../README.md"
+outdir = "./dist"
+
+[[build.copy]]
+source = "./temp"
+target = "/"
+
+
+[publish]
+repository = "https://thunderstore.io"
+communities = [ "hollow-knight-silksong" ]
+
+[publish.categories]
+hollow-knight-silksong = [ "mods", "skins" ]

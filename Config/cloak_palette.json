@@ -1,0 +1,13 @@
+{
+  "_comment": "Runtime recolor is mask-driven: a tk2d atlas is recolored only when CloakMasks/<collection>/<texture>.png (or legacy CloakMasks/<texture>.png) exists. Missing masks are left untouched; no runtime mask baking or collection allowlist is used.",
+  "debugLogging": false,
+
+  "_comment_mapIcon": "When true, logs SSMP compass/map-icon sync (without cloak scanner noise unless debugLogging is on).",
+  "mapIconDebugLogging": false,
+
+  "_comment_heroMesh": "CloakRecolor re-scans the player MeshRenderer list every N frames; material re-apply is still every LateUpdate.",
+  "heroMeshRescanIntervalFrames": 30,
+
+  "_comment_dumpTex": "When true, discovery writes <atlas>-original.png beside the mask path; missing masks also get an empty transparent <atlas>.png template.",
+  "dumpDiscoveredTextures": false
+}

@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Condition="Exists('..\SilksongPath.props')" Project="..\SilksongPath.props" />
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>HornetCloakColor</RootNamespace>
+    <AssemblyName>HornetCloakColor.SSMP</AssemblyName>
+    <EnableNETAnalyzers>True</EnableNETAnalyzers>
+    <AnalysisMode>recommended</AnalysisMode>
+    <NoWarn>$(NoWarn);MSB3270</NoWarn>
+    <PathMap Condition="'$(Configuration)' == 'Release'">$(MSBuildProjectDirectory)=/</PathMap>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference the already-built main DLL so MSBuild has no project cycle with HornetCloakColor.csproj. -->
+    <Reference Include="HornetCloakColor">
+      <HintPath>$(MSBuildThisFileDirectory)..\bin\$(Configuration)\netstandard2.1\HornetCloakColor.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <PackageReference Include="UnityEngine.Modules" Version="6000.0.50" IncludeAssets="compile" />
+    <PackageReference Include="Silksong.GameLibs" Version="*-*" PrivateAssets="all" />
+
+    <Reference Include="SSMP" Condition="'$(SSMPDll)' != '' And Exists('$(SSMPDll)')">
+      <HintPath>$(SSMPDll)</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SSMP" Condition="'$(SSMPDll)' == '' And Exists('$(SilksongFolder)/BepInEx/plugins/SSMP/SSMP.dll')">
+      <HintPath>$(SilksongFolder)/BepInEx/plugins/SSMP/SSMP.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SSMP" Condition="'$(SSMPDll)' == '' And !Exists('$(SilksongFolder)/BepInEx/plugins/SSMP/SSMP.dll') And Exists('..\..\SSMP\bin\Release\netstandard2.1\SSMP.dll')">
+      <HintPath>..\..\SSMP\bin\Release\netstandard2.1\SSMP.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="CheckReferences" BeforeTargets="CoreCompile">
+    <Error
+      Condition="!Exists('$(MSBuildThisFileDirectory)..\bin\$(Configuration)\netstandard2.1\HornetCloakColor.dll')"
+      Text="Build HornetCloakColor first (HornetCloakColor.dll missing for satellite reference)." />
+    <Error
+      Condition="'$(SSMPDll)' == '' And !Exists('$(SilksongFolder)/BepInEx/plugins/SSMP/SSMP.dll') And !Exists('..\..\SSMP\bin\Release\netstandard2.1\SSMP.dll')"
+      Text="Unable to locate SSMP.dll for HornetCloakColor.SSMP. Set SSMPDll in SilksongPath.props, install SSMP under BepInEx/plugins/SSMP, or build the SSMP project." />
+  </Target>
+
+  <Target Name="CopySatelliteNextToMain" AfterTargets="PostBuildEvent">
+    <Copy SourceFiles="$(TargetPath)"
+          DestinationFolder="..\bin\$(Configuration)\netstandard2.1\"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(TargetDir)$(TargetName).pdb"
+          DestinationFolder="..\bin\$(Configuration)\netstandard2.1\"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
+  </Target>
+</Project>
