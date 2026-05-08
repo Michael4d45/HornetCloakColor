@@ -15,6 +15,19 @@ namespace HornetCloakColor.Client
         public static string CollectionFolder(string? tk2dCollectionName) =>
             string.IsNullOrWhiteSpace(tk2dCollectionName) ? NoCollectionFolder : SanitizeFileStem(tk2dCollectionName);
 
+        /// <summary>
+        /// Secondary compatibility folder after <see cref="CollectionFolder"/> of the raw tk2d name: SSMP remote
+        /// bodies report <c>Player Prefab</c> while shipped gameplay masks often live under <c>Knight/</c>.
+        /// Resolution tries <c>CloakMasks/&lt;raw&gt;/</c> first (dumps, hand-authored masks), then this alias.
+        /// </summary>
+        public static string? MaskCollectionNameForLookup(string? tk2dCollectionName)
+        {
+            if (string.Equals(tk2dCollectionName, "Player Prefab", StringComparison.OrdinalIgnoreCase))
+                return "Knight";
+
+            return tk2dCollectionName;
+        }
+
         public static string SanitizeFileStem(string? name)
         {
             if (string.IsNullOrEmpty(name)) return "tex";

@@ -13,8 +13,9 @@ namespace HornetCloakColor.Client
     /// Scene-wide fallback: tints orphan <see cref="tk2dSprite"/>s whose atlas has a matching
     /// mask PNG under <c>CloakMasks/</c>.
     ///
-    /// Catches renderers spawned <i>outside</i> <see cref="HeroController"/>'s hierarchy
-    /// (e.g. steam-vent recoil, item-get pose, <c>Knight Spike Death(Clone)</c>).
+    /// Catches renderers spawned <i>outside</i> <see cref="HeroController"/>'s hierarchy and outside
+    /// SSMP&apos;s <c>Player Container *</c> pooled bodies (those use <see cref="CloakRecolor"/> per player).
+    /// Examples: steam-vent recoil, item-get pose, <c>Knight Spike Death(Clone)</c>.
     ///
     /// <para>
     /// Discovery has two paths:
@@ -163,6 +164,11 @@ namespace HornetCloakColor.Client
             if (sprite.GetComponentInParent<CloakRecolor>() != null)
                 return;
 
+            // Remote SSMP bodies: Awake runs before CloakRecolor is attached — do not enroll as orphans or we
+            // stomp their tint every frame with this scanner's _color (local player's scene tint).
+            if (IsUnderSsmpPlayerContainer(sprite.transform))
+                return;
+
             var renderer = sprite.GetComponent<MeshRenderer>();
             if (renderer == null)
                 return;
@@ -202,6 +208,9 @@ namespace HornetCloakColor.Client
 
             var tex = shared.mainTexture;
             if (tex == null) return false;
+
+            // SSMP pooled multiplayer bodies (prefix matches SSMP.Game.Client.PlayerManager).
+            if (IsUnderSsmpPlayerContainer(renderer.transform)) return false;
 
             // Renderers under a CloakRecolor are owned by the per-player path. Compass icons are
             // tinted by the map-mask code; both paths would otherwise stomp on each other.
@@ -361,6 +370,22 @@ namespace HornetCloakColor.Client
         {
             if (t == null) return false;
             return t.name.StartsWith("Compass Icon", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// True when <paramref name="t"/> is under an SSMP player container (remote/pooled MP Hornet bodies).
+        /// CloakRecolor is attached after spawn completes; until then the scanner must not claim these meshes.
+        /// </summary>
+        private static bool IsUnderSsmpPlayerContainer(Transform t)
+        {
+            const string prefix = "Player Container ";
+            for (var p = t; p != null; p = p.parent)
+            {
+                if (p.name.StartsWith(prefix, StringComparison.Ordinal))
+                    return true;
+            }
+
+            return false;
         }
 
         /// <summary>Hierarchy path like <c>Root/Child/Leaf</c> for logging.</summary>

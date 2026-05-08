@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using HornetCloakColor;
 using HornetCloakColor.Shared;
@@ -116,6 +117,12 @@ namespace HornetCloakColor.Client
                 return new UsernameResolveResult(true, true, 0);
             }
 
+            // SSMP.PlayerManager.SpawnPlayer calls AddNameToPlayer *before* assigning
+            // ClientPlayerData.PlayerContainer. The Harmony postfix on ChangeNameColor therefore runs when
+            // IsChildOf(p.PlayerContainer) cannot match yet — resolve by container object name instead.
+            if (TryResolveRemoteByPlayerContainerAncestor(t, out var idFromAncestor))
+                return new UsernameResolveResult(true, false, idFromAncestor);
+
             if (_api == null) return default;
 
             foreach (var p in _api.ClientManager.Players)
@@ -125,6 +132,25 @@ namespace HornetCloakColor.Client
             }
 
             return default;
+        }
+
+        /// <summary>
+        /// Mirrors <c>SSMP.Game.Client.PlayerManager</c> naming: <c>Player Container {ushort id}</c>.
+        /// </summary>
+        private static bool TryResolveRemoteByPlayerContainerAncestor(Transform t, out ushort playerId)
+        {
+            playerId = 0;
+            const string prefix = "Player Container ";
+            for (var p = t; p != null; p = p.parent)
+            {
+                var name = p.name;
+                if (!name.StartsWith(prefix, StringComparison.Ordinal))
+                    continue;
+                var suffix = name.Substring(prefix.Length);
+                return ushort.TryParse(suffix, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out playerId);
+            }
+
+            return false;
         }
 
         private bool TryGetLocalNetworkPlayerId(out ushort id)
@@ -185,10 +211,27 @@ namespace HornetCloakColor.Client
 
         private void OnPlayerEnterScene(IClientPlayer player)
         {
-            if (_playerColors.TryGetValue(player.Id, out var color))
+            if (_playerColors.TryGetValue(player.Id, out var color) && player.PlayerObject != null)
             {
                 CloakColorApplier.Apply(player.PlayerObject, color);
+                // Skin/tk2d can stomp materials after this callback — reinforce tint across frames.
+                if (!IsLocalHeroPlayer(player))
+                    MpRemoteCloakReapply.Schedule(player.PlayerObject, color);
             }
+
+            // Spawn finishes assigning PlayerContainer after the initial ChangeNameColor call; reapply any
+            // cached custom username RGB now that the Username TMP exists and delegates can resolve.
+            // Skip the local hero — their tint is driven by config + Harmony on ChangeNameColor only.
+            if (!IsLocalHeroPlayer(player))
+                RefreshRemoteUsernameVisual(player.Id);
+        }
+
+        private static bool IsLocalHeroPlayer(IClientPlayer player)
+        {
+            var hero = HeroController.instance;
+            return hero != null
+                   && player.PlayerObject != null
+                   && ReferenceEquals(player.PlayerObject, hero.gameObject);
         }
 
         private void OnPlayerDisconnect(IClientPlayer player)
@@ -207,6 +250,7 @@ namespace HornetCloakColor.Client
             if (player?.PlayerObject != null)
             {
                 CloakColorApplier.Apply(player.PlayerObject, data.Color);
+                MpRemoteCloakReapply.Schedule(player.PlayerObject, data.Color);
             }
         }
 

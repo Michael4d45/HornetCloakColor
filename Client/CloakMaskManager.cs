@@ -8,15 +8,15 @@ using UnityEngine;
 namespace HornetCloakColor.Client
 {
     /// <summary>
-    /// Per-atlas R masks under <c>CloakMasks/&lt;tk2d collection name&gt;/&lt;MainTex.name&gt;.png</c>
-    /// next to the plugin DLL (legacy flat <c>CloakMasks/&lt;MainTex.name&gt;.png</c> is still loaded if present).
+    /// Per-atlas R masks under <c>CloakMasks/&lt;raw tk2d collection name&gt;/&lt;MainTex.name&gt;.png</c>,
+    /// then compatibility alias (e.g. <c>Player Prefab</c> → <c>Knight</c>), then legacy flat
+    /// <c>CloakMasks/&lt;MainTex.name&gt;.png</c>. No heuristic searching — paths must match exactly.
     /// Weights drive the in-game cloak shader; missing files mean that atlas is left untouched.
     /// </summary>
     internal static class CloakMaskManager
     {
         /// <summary>Canonical key: <c>CloakMasks/&lt;collection&gt;/&lt;texture&gt;.png</c> (full path).</summary>
         private static readonly Dictionary<string, Texture2D> ByMaskFilePath = new(StringComparer.OrdinalIgnoreCase);
-        private static readonly HashSet<string> MissingMaskFilePaths = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// Hot-path cache keyed by <c>(texture instance id, collection folder stem)</c>.
@@ -76,11 +76,11 @@ namespace HornetCloakColor.Client
             }
 
             ByMaskFilePath.Clear();
-            MissingMaskFilePaths.Clear();
             ByTextureCollectionKey.Clear();
             ByTexture2DMaskName.Clear();
             DumpedOriginalPaths.Clear();
             DumpedTemplatePaths.Clear();
+            MaskDiagLoggedCompositeKeys.Clear();
 
             // Mask Texture2D instance IDs change after a reload; force every memoized renderer
             // to take the slow path on its next Apply so it picks up the new (or now-missing) mask.
@@ -159,6 +159,8 @@ namespace HornetCloakColor.Client
             return true;
         }
 
+        private static readonly HashSet<string> MaskDiagLoggedCompositeKeys = new(StringComparer.Ordinal);
+
         private static string PluginDir
         {
             get
@@ -174,7 +176,7 @@ namespace HornetCloakColor.Client
         /// Returns a linear <see cref="Texture2D"/> mask for <paramref name="mainTex"/> if one exists on disk.
         /// Missing or invalid masks return <c>false</c> so callers can leave that renderer untouched.
         /// </summary>
-        /// <param name="tk2dCollectionName"><c>tk2dSprite.Collection.name</c> for on-disk layout (sanitized folder).</param>
+        /// <param name="tk2dCollectionName"><c>tk2dSprite.Collection.name</c> (raw); on-disk layout tries this folder first, then compatibility aliases.</param>
         public static bool TryGetMaskForMainTexture(Texture? mainTex, string? tk2dCollectionName, out Texture2D mask)
         {
             mask = BlackWeightMask;
@@ -185,14 +187,35 @@ namespace HornetCloakColor.Client
             if (mainTex.width <= 0 || mainTex.height <= 0)
                 return false;
 
-            var collectionStem = CloakDiskNames.CollectionFolder(tk2dCollectionName);
+            var collectionRaw = tk2dCollectionName;
+            var stemPrimary = CloakDiskNames.CollectionFolder(collectionRaw);
+            var stemAlias = CloakDiskNames.CollectionFolder(CloakDiskNames.MaskCollectionNameForLookup(collectionRaw));
             var texId = mainTex.GetInstanceID();
-            var compositeKey = TextureCollectionCacheKey(texId, collectionStem);
+            var compositeKey = TextureCollectionCacheKey(texId, stemPrimary);
 
-            // Hot-path: resolved mask or proven absence for this texture + collection layout.
+            var logDetail = CloakPaletteConfig.LogMaskResolutionDiagnostics
+                            && !MaskDiagLoggedCompositeKeys.Contains(compositeKey);
+
+            void FinishMaskDiag()
+            {
+                if (logDetail)
+                    MaskDiagLoggedCompositeKeys.Add(compositeKey);
+            }
+
+            // Hot-path: resolved mask or proven absence for this texture + raw collection stem.
             if (ByTextureCollectionKey.TryGetValue(compositeKey, out var cachedById))
             {
-                if (cachedById == null) return false;
+                if (cachedById == null)
+                {
+                    if (logDetail)
+                    {
+                        Log.Info($"[CloakMasksDiag] cache hit — no mask for compositeKey={compositeKey} tex='{mainTex.name}' id={texId}");
+                        FinishMaskDiag();
+                    }
+
+                    return false;
+                }
+
                 mask = cachedById;
                 return true;
             }
@@ -201,30 +224,48 @@ namespace HornetCloakColor.Client
                 string.IsNullOrEmpty(mainTex.name) ? $"tex_{mainTex.GetInstanceID()}" : mainTex.name);
 
             var masksDir = Path.Combine(PluginDir, "CloakMasks");
-            var collectionDir = Path.Combine(masksDir, collectionStem);
-            var preferredPath = Path.Combine(collectionDir, $"{texStem}.png");
+            var primaryPath = Path.Combine(masksDir, stemPrimary, $"{texStem}.png");
+            var aliasPath = Path.Combine(masksDir, stemAlias, $"{texStem}.png");
             var legacyFlatPath = Path.Combine(masksDir, $"{texStem}.png");
 
-            if (ByMaskFilePath.TryGetValue(preferredPath, out var cached) && cached != null)
+            foreach (var p in EnumerateCandidateMaskPaths(primaryPath, aliasPath, legacyFlatPath))
             {
-                ByTextureCollectionKey[compositeKey] = cached;
-                mask = cached;
-                return true;
+                if (ByMaskFilePath.TryGetValue(p, out var cached) && cached != null)
+                {
+                    ByTextureCollectionKey[compositeKey] = cached;
+                    mask = cached;
+                    return true;
+                }
             }
 
-            if (MissingMaskFilePaths.Contains(preferredPath))
+            if (logDetail)
             {
-                ByTextureCollectionKey[compositeKey] = null;
-                return false;
+                var rawCol = collectionRaw ?? "(null)";
+                var aliasNote = string.Equals(stemPrimary, stemAlias, StringComparison.Ordinal)
+                    ? ""
+                    : $" stemAlias='{stemAlias}'";
+                Log.Info($"[CloakMasksDiag] disk resolve start compositeKey={compositeKey} tex='{mainTex.name}' id={texId} size={mainTex.width}x{mainTex.height} collectionRaw='{rawCol}' stemPrimary='{stemPrimary}'{aliasNote} texStem='{texStem}'");
+                Log.Info($"[CloakMasksDiag]   primary exists={File.Exists(primaryPath)} → {primaryPath}");
+                if (!string.Equals(primaryPath, aliasPath, StringComparison.OrdinalIgnoreCase))
+                    Log.Info($"[CloakMasksDiag]   aliasCompat exists={File.Exists(aliasPath)} → {aliasPath}");
+                Log.Info($"[CloakMasksDiag]   legacyFlat exists={File.Exists(legacyFlatPath)} → {legacyFlatPath}");
             }
 
             Texture2D? maskTex = null;
             string? resolvedPath = null;
+            string? resolveBranch = null;
 
-            if (File.Exists(preferredPath))
-                resolvedPath = preferredPath;
-            else if (File.Exists(legacyFlatPath))
-                resolvedPath = legacyFlatPath;
+            foreach (var (path, branch) in EnumerateCandidateMaskPathsWithBranch(primaryPath, aliasPath, legacyFlatPath))
+            {
+                if (!File.Exists(path))
+                    continue;
+                resolvedPath = path;
+                resolveBranch = branch;
+                break;
+            }
+
+            if (logDetail)
+                Log.Info($"[CloakMasksDiag]   branch={resolveBranch ?? "(none)"} resolvedPath={(resolvedPath ?? "(null)")}");
 
             if (resolvedPath != null)
             {
@@ -234,6 +275,8 @@ namespace HornetCloakColor.Client
                 {
                     Log.Warn($"[CloakMasks] '{resolvedPath}' size {maskTex.width}x{maskTex.height} does not match atlas " +
                              $"'{mainTex.name}' ({mainTex.width}x{mainTex.height}). Using zero mask (no recolor) for this atlas.");
+                    if (logDetail)
+                        Log.Info($"[CloakMasksDiag] RESULT: rejected loaded mask — size mismatch after branch={resolveBranch}");
                     UnityEngine.Object.Destroy(maskTex);
                     maskTex = null;
                 }
@@ -241,23 +284,56 @@ namespace HornetCloakColor.Client
 
             if (maskTex == null)
             {
-                MaybeDumpDiscoveredTextureFiles(mainTex, preferredPath, createEmptyMask: true);
-                MissingMaskFilePaths.Add(preferredPath);
+                MaybeDumpDiscoveredTextureFiles(mainTex, primaryPath, createEmptyMask: true);
                 ByTextureCollectionKey[compositeKey] = null;
+                if (logDetail)
+                {
+                    Log.Info($"[CloakMasksDiag] RESULT: no mask (texStem={texStem})");
+                    FinishMaskDiag();
+                }
+
                 return false;
             }
 
             maskTex.wrapMode = TextureWrapMode.Clamp;
             maskTex.filterMode = FilterMode.Bilinear;
-            maskTex.name = $"CloakMask:{collectionStem}/{texStem}";
-            ByMaskFilePath[preferredPath] = maskTex;
+            var folderStem = Path.GetFileName(Path.GetDirectoryName(resolvedPath)) ?? stemPrimary;
+            maskTex.name = $"CloakMask:{folderStem}/{texStem}";
+
+            ByMaskFilePath[primaryPath] = maskTex;
+            if (!string.Equals(primaryPath, resolvedPath, StringComparison.OrdinalIgnoreCase))
+                ByMaskFilePath[resolvedPath!] = maskTex;
+
             ByTextureCollectionKey[compositeKey] = maskTex;
 
-            var maskPathForDump = resolvedPath ?? preferredPath;
-            MaybeDumpDiscoveredTextureFiles(mainTex, maskPathForDump, createEmptyMask: false);
+            MaybeDumpDiscoveredTextureFiles(mainTex, primaryPath, createEmptyMask: false);
 
             mask = maskTex;
+
+            if (logDetail)
+            {
+                Log.Info($"[CloakMasksDiag] RESULT: OK mask loaded bytes→texture name={maskTex.name}");
+                FinishMaskDiag();
+            }
+
             return true;
+        }
+
+        private static IEnumerable<string> EnumerateCandidateMaskPaths(string primaryPath, string aliasPath, string legacyFlatPath)
+        {
+            yield return primaryPath;
+            if (!string.Equals(primaryPath, aliasPath, StringComparison.OrdinalIgnoreCase))
+                yield return aliasPath;
+            yield return legacyFlatPath;
+        }
+
+        private static IEnumerable<(string path, string branch)> EnumerateCandidateMaskPathsWithBranch(
+            string primaryPath, string aliasPath, string legacyFlatPath)
+        {
+            yield return (primaryPath, "primary(raw collection folder)");
+            if (!string.Equals(primaryPath, aliasPath, StringComparison.OrdinalIgnoreCase))
+                yield return (aliasPath, "aliasCompat(e.g. Knight for Player Prefab)");
+            yield return (legacyFlatPath, "legacyFlat(CloakMasks root)");
         }
 
         /// <summary>

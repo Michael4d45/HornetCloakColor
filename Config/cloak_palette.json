@@ -1,6 +1,9 @@
 {
-  "_comment": "Runtime recolor is mask-driven: a tk2d atlas is recolored only when CloakMasks/<collection>/<texture>.png (or legacy CloakMasks/<texture>.png) exists. Missing masks are left untouched; no runtime mask baking or collection allowlist is used.",
+  "_comment": "Runtime recolor is mask-driven: a tk2d atlas is recolored only when CloakMasks/<tk2d collection name>/<texture>.png exists (then optional CloakMasks/<compat alias>/ e.g. Knight for Player Prefab, then legacy CloakMasks/<texture>.png). Missing masks are left untouched.",
   "debugLogging": false,
+
+  "_comment_maskDiag": "When true, logs CloakMaskManager mask path resolution (primary / alias / legacy). Optional; omit noise from debugLogging + scanner.",
+  "maskResolutionDebugLogging": false,
 
   "_comment_mapIcon": "When true, logs SSMP compass/map-icon sync (without cloak scanner noise unless debugLogging is on).",
   "mapIconDebugLogging": false,
@@ -8,6 +11,6 @@
   "_comment_heroMesh": "CloakRecolor re-scans the player MeshRenderer list every N frames; material re-apply is still every LateUpdate.",
   "heroMeshRescanIntervalFrames": 30,
 
-  "_comment_dumpTex": "When true, discovery writes <atlas>-original.png beside the mask path; missing masks also get an empty transparent <atlas>.png template.",
+  "_comment_dumpTex": "When true, discovery writes <atlas>-original.png under CloakMasks/<raw collection name>/ (same folder as the mask); missing masks also get an empty transparent <atlas>.png template there. Enable once to dump atlases, then paint masks in-place for that collection (e.g. Player Prefab).",
   "dumpDiscoveredTextures": false
 }

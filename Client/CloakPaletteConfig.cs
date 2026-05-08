@@ -19,6 +19,15 @@ namespace HornetCloakColor.Client
         public static bool DebugLogging { get; private set; }
 
         /// <summary>
+        /// Per-atlas mask file resolution (primary collection folder, compatibility alias, legacy flat). Independent of
+        /// <see cref="DebugLogging"/> so you can trace <see cref="CloakMaskManager"/> without scanner spam.
+        /// </summary>
+        public static bool MaskResolutionDebugLogging { get; private set; }
+
+        /// <summary>Mask path tracing when diagnosing SSMP remote bodies / empty tk2d collection names.</summary>
+        internal static bool LogMaskResolutionDiagnostics => DebugLogging || MaskResolutionDebugLogging;
+
+        /// <summary>
         /// SSMP map / compass icon sync (broadcast, late-join replay, deferred <c>CreatePlayerIcon</c>).
         /// Independent of <see cref="DebugLogging"/> so you can trace multiplayer pins without cloak spam.
         /// </summary>
@@ -59,6 +68,8 @@ namespace HornetCloakColor.Client
                             Log.Info($"Loaded cloak runtime config from {diskPath}.");
                             if (MapIconDebugLogging)
                                 Log.Info("[MapIcon] mapIconDebugLogging is true — tracing map/compass sync; grep log for \"[MapIcon]\".");
+                            if (MaskResolutionDebugLogging)
+                                Log.Info("[CloakMasksDiag] maskResolutionDebugLogging is true — tracing mask path resolution; grep \"[CloakMasksDiag]\".");
                         }
                         else
                             Log.Warn("cloak_palette.json was not valid; using built-in defaults from the mod DLL.");
@@ -76,6 +87,7 @@ namespace HornetCloakColor.Client
         private static void ApplyDefaults()
         {
             DebugLogging = false;
+            MaskResolutionDebugLogging = false;
             MapIconDebugLogging = false;
             HeroMeshRescanIntervalFrames = 30;
             DumpDiscoveredTextures = false;
@@ -92,6 +104,9 @@ namespace HornetCloakColor.Client
 
             if (TryExtractBool(trimmed, "debugLogging", out var dbg))
                 DebugLogging = dbg;
+
+            if (TryExtractBool(trimmed, "maskResolutionDebugLogging", out var maskDiag))
+                MaskResolutionDebugLogging = maskDiag;
 
             if (TryExtractBool(trimmed, "mapIconDebugLogging", out var mapIconDbg))
                 MapIconDebugLogging = mapIconDbg;

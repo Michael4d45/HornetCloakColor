@@ -19,7 +19,7 @@ namespace HornetCloakColor
         /// Keep this in sync with &lt;Version&gt; in HornetCloakColor.csproj. The BepInAutoPlugin
         /// attribute requires a compile-time constant, so we can't read from the csproj directly.
         /// </summary>
-        public const string ModVersion = "1.12.0";
+        public const string ModVersion = "1.13.0";
 
         internal static HornetCloakColorPlugin? Instance { get; private set; }
         internal static ManualLogSource? LogSource { get; private set; }
@@ -66,7 +66,8 @@ namespace HornetCloakColor
         }
 
         /// <summary>
-        /// Retries satellite registration and applies username tint once SSMP client delegates exist.
+        /// Retries satellite registration until username Harmony delegates exist; then pushes username + cloak RGB once.
+        /// Cloak push mirrors <see cref="PushLocalUsernameToNetwork"/> timing so both run after SSMP client wiring is ready.
         /// </summary>
         private IEnumerator SsmpIntegrationRetryRoutine()
         {
@@ -82,6 +83,7 @@ namespace HornetCloakColor
                 if (SSMPBridge.IsRegistered && UsernameNetworkDelegates.TryResolveUsernameTransform != null)
                 {
                     PushLocalUsernameToNetwork();
+                    PushLocalCloakColorToNetwork();
                     yield break;
                 }
 
@@ -96,7 +98,19 @@ namespace HornetCloakColor
             if (SSMPBridge.TryRegister())
             {
                 Logger.LogInfo("SSMP detected — multiplayer cloak + username sync enabled.");
+                PushLocalCloakColorToNetwork();
             }
+        }
+
+        /// <summary>
+        /// Calls <see cref="SSMPBridge.NotifyLocalColorChanged"/> with <see cref="CloakColorConfig.EffectiveColor"/>.
+        /// Safe to call repeatedly. After registration, call at least once: while <see cref="SSMPBridge.IsRegistered"/>
+        /// was false, <see cref="SSMPBridge.NotifyLocalColorChanged"/> returned immediately and did not update the satellite.
+        /// </summary>
+        private void PushLocalCloakColorToNetwork()
+        {
+            if (!SSMPBridge.IsRegistered) return;
+            SSMPBridge.NotifyLocalColorChanged(ColorConfig.EffectiveColor);
         }
 
         private void OnHeroInstanceSet(HeroController hero)
