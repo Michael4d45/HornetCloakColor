@@ -9,8 +9,7 @@ namespace HornetCloakColor.Client
 {
     /// <summary>
     /// Per-atlas R masks under <c>CloakMasks/&lt;raw tk2d collection name&gt;/&lt;MainTex.name&gt;.png</c>,
-    /// then compatibility alias (e.g. <c>Player Prefab</c> → <c>Knight</c>), then legacy flat
-    /// <c>CloakMasks/&lt;MainTex.name&gt;.png</c>. No heuristic searching — paths must match exactly.
+    /// then compatibility alias (e.g. <c>Player Prefab</c> → <c>Knight</c>). No heuristic searching — paths must match exactly.
     /// Weights drive the in-game cloak shader; missing files mean that atlas is left untouched.
     /// </summary>
     internal static class CloakMaskManager
@@ -226,9 +225,8 @@ namespace HornetCloakColor.Client
             var masksDir = Path.Combine(PluginDir, "CloakMasks");
             var primaryPath = Path.Combine(masksDir, stemPrimary, $"{texStem}.png");
             var aliasPath = Path.Combine(masksDir, stemAlias, $"{texStem}.png");
-            var legacyFlatPath = Path.Combine(masksDir, $"{texStem}.png");
 
-            foreach (var p in EnumerateCandidateMaskPaths(primaryPath, aliasPath, legacyFlatPath))
+            foreach (var p in EnumerateCandidateMaskPaths(primaryPath, aliasPath))
             {
                 if (ByMaskFilePath.TryGetValue(p, out var cached) && cached != null)
                 {
@@ -248,14 +246,13 @@ namespace HornetCloakColor.Client
                 Log.Info($"[CloakMasksDiag]   primary exists={File.Exists(primaryPath)} → {primaryPath}");
                 if (!string.Equals(primaryPath, aliasPath, StringComparison.OrdinalIgnoreCase))
                     Log.Info($"[CloakMasksDiag]   aliasCompat exists={File.Exists(aliasPath)} → {aliasPath}");
-                Log.Info($"[CloakMasksDiag]   legacyFlat exists={File.Exists(legacyFlatPath)} → {legacyFlatPath}");
             }
 
             Texture2D? maskTex = null;
             string? resolvedPath = null;
             string? resolveBranch = null;
 
-            foreach (var (path, branch) in EnumerateCandidateMaskPathsWithBranch(primaryPath, aliasPath, legacyFlatPath))
+            foreach (var (path, branch) in EnumerateCandidateMaskPathsWithBranch(primaryPath, aliasPath))
             {
                 if (!File.Exists(path))
                     continue;
@@ -319,21 +316,19 @@ namespace HornetCloakColor.Client
             return true;
         }
 
-        private static IEnumerable<string> EnumerateCandidateMaskPaths(string primaryPath, string aliasPath, string legacyFlatPath)
+        private static IEnumerable<string> EnumerateCandidateMaskPaths(string primaryPath, string aliasPath)
         {
             yield return primaryPath;
             if (!string.Equals(primaryPath, aliasPath, StringComparison.OrdinalIgnoreCase))
                 yield return aliasPath;
-            yield return legacyFlatPath;
         }
 
         private static IEnumerable<(string path, string branch)> EnumerateCandidateMaskPathsWithBranch(
-            string primaryPath, string aliasPath, string legacyFlatPath)
+            string primaryPath, string aliasPath)
         {
             yield return (primaryPath, "primary(raw collection folder)");
             if (!string.Equals(primaryPath, aliasPath, StringComparison.OrdinalIgnoreCase))
                 yield return (aliasPath, "aliasCompat(e.g. Knight for Player Prefab)");
-            yield return (legacyFlatPath, "legacyFlat(CloakMasks root)");
         }
 
         /// <summary>

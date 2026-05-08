@@ -15,13 +15,21 @@ namespace HornetCloakColor.Client
     /// mask PNGs under <c>CloakMasks/</c>.
     ///
     /// Mesh renderers are cached and the hierarchy is re-scanned every
-    /// <see cref="CloakPaletteConfig.HeroMeshRescanIntervalFrames"/> (default 30) instead of every frame,
+    /// <see cref="CloakPaletteConfig.HeroMeshRescanIntervalFrames"/> (default 4) instead of every frame,
     /// while <see cref="CloakMaterialApplier.Apply"/> still runs every <c>LateUpdate</c> so tk2d material swaps stay tinted.
+    /// One <see cref="Camera.onPreRender"/> callback per frame runs after all LateUpdates so tk2d cannot restore vanilla
+    /// materials later in the same frame (common on sprint / Witch dash).
+    /// Sprites touched via <see cref="ApplyFromTk2dPipeline"/> register their <see cref="MeshRenderer"/> immediately so
+    /// crest-specific attack subtrees tint even before the next periodic rescan.
     /// </summary>
-    [DefaultExecutionOrder(10000)]
+    [DefaultExecutionOrder(32000)]
     [DisallowMultipleComponent]
     internal class CloakRecolor : MonoBehaviour
     {
+        private static readonly List<CloakRecolor> ActiveInstances = new();
+        private static bool _cameraPreRenderHooked;
+        private static int _lastCameraPreRenderFrame = -1;
+
         public CloakColor Color { get; private set; } = CloakColor.Default;
         public bool UseCloakShader { get; private set; } = true;
 
@@ -29,6 +37,7 @@ namespace HornetCloakColor.Client
         private readonly Dictionary<MeshRenderer, Shader> _originalShaderByRenderer = new();
 
         private readonly List<MeshRenderer> _meshCache = new();
+        private readonly HashSet<MeshRenderer> _meshCacheSet = new();
         private int _meshRescanCountdown;
         private bool _meshCacheInvalid = true;
 
@@ -41,6 +50,8 @@ namespace HornetCloakColor.Client
             var meshRenderer = sprite.GetComponent<MeshRenderer>();
             if (meshRenderer == null)
                 return;
+
+            EnsureMeshRendererTracked(meshRenderer);
 
             CloakMaterialApplier.InvalidateRenderer(meshRenderer);
             CloakMaterialApplier.Apply(
@@ -63,7 +74,48 @@ namespace HornetCloakColor.Client
             recolor?.ForceHierarchyRefresh();
         }
 
-        private void OnEnable() => _meshCacheInvalid = true;
+        private void OnEnable()
+        {
+            _meshCacheInvalid = true;
+            if (!ActiveInstances.Contains(this))
+                ActiveInstances.Add(this);
+            if (!_cameraPreRenderHooked)
+            {
+                Camera.onPreRender += OnCameraPreRenderStatic;
+                _cameraPreRenderHooked = true;
+            }
+        }
+
+        private void OnDisable()
+        {
+            ActiveInstances.Remove(this);
+            if (ActiveInstances.Count == 0 && _cameraPreRenderHooked)
+            {
+                Camera.onPreRender -= OnCameraPreRenderStatic;
+                _cameraPreRenderHooked = false;
+            }
+        }
+
+        private static void OnCameraPreRenderStatic(Camera _)
+        {
+            var frame = Time.frameCount;
+            if (frame == _lastCameraPreRenderFrame)
+                return;
+            _lastCameraPreRenderFrame = frame;
+
+            for (var i = ActiveInstances.Count - 1; i >= 0; i--)
+            {
+                var recolor = ActiveInstances[i];
+                if (!recolor)
+                {
+                    ActiveInstances.RemoveAt(i);
+                    continue;
+                }
+
+                CloakMaterialApplier.PruneDestroyed(recolor._originalShaderByRenderer);
+                recolor.ApplyToCachedMeshRenderersCore();
+            }
+        }
 
         /// <summary>
         /// Full mesh cache rebuild + invalidate per-renderer memoization + immediate apply.
@@ -87,8 +139,11 @@ namespace HornetCloakColor.Client
         {
             Color          = color;
             UseCloakShader = useCloakShader;
+            CloakSceneScanner.EnsureCreated();
+            CloakSceneScanner.ReleaseEligibleUnderTransform(transform);
             _meshCacheInvalid = true;
             RebuildMeshCache();
+            CloakMaterialApplier.InvalidateSubtree(transform);
             ApplyToCachedMeshRenderersCore();
         }
 
@@ -115,6 +170,7 @@ namespace HornetCloakColor.Client
             _meshCacheInvalid = false;
             _meshRescanCountdown = Mathf.Max(1, CloakPaletteConfig.HeroMeshRescanIntervalFrames);
             _meshCache.Clear();
+            _meshCacheSet.Clear();
 
             var renderers = GetComponentsInChildren<MeshRenderer>(true);
             if (renderers == null || renderers.Length == 0) return;
@@ -127,7 +183,20 @@ namespace HornetCloakColor.Client
                     continue;
 
                 _meshCache.Add(meshRenderer);
+                _meshCacheSet.Add(meshRenderer);
             }
+        }
+
+        /// <summary>
+        /// Attack subtrees can appear or activate after the last full scan; tk2d hooks still drive those sprites every frame.
+        /// </summary>
+        private void EnsureMeshRendererTracked(MeshRenderer meshRenderer)
+        {
+            if (meshRenderer == null || IsUnderSsmpUsernameObject(meshRenderer.transform))
+                return;
+
+            if (_meshCacheSet.Add(meshRenderer))
+                _meshCache.Add(meshRenderer);
         }
 
         private void ApplyToCachedMeshRenderersCore()

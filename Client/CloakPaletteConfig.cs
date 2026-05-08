@@ -19,7 +19,7 @@ namespace HornetCloakColor.Client
         public static bool DebugLogging { get; private set; }
 
         /// <summary>
-        /// Per-atlas mask file resolution (primary collection folder, compatibility alias, legacy flat). Independent of
+        /// Per-atlas mask file resolution (primary collection folder, compatibility alias). Independent of
         /// <see cref="DebugLogging"/> so you can trace <see cref="CloakMaskManager"/> without scanner spam.
         /// </summary>
         public static bool MaskResolutionDebugLogging { get; private set; }
@@ -46,7 +46,7 @@ namespace HornetCloakColor.Client
         /// <summary>
         /// How often <see cref="CloakRecolor"/> re-runs <c>GetComponentsInChildren</c> for <see cref="MeshRenderer"/> to
         /// refresh its cache (material re-apply still runs every <c>LateUpdate</c>). Higher = cheaper;
-        /// lower picks up new child meshes from animations sooner. 1 = previous behavior (full scan every frame).
+        /// lower picks up new child meshes from animations sooner. 1 = full hierarchy scan every frame (most responsive).
         /// </summary>
         public static int HeroMeshRescanIntervalFrames { get; private set; }
 
@@ -89,7 +89,8 @@ namespace HornetCloakColor.Client
             DebugLogging = false;
             MaskResolutionDebugLogging = false;
             MapIconDebugLogging = false;
-            HeroMeshRescanIntervalFrames = 30;
+            // Default was 30 (~500 ms at 60 Hz before newly spawned attack/death meshes appeared in the cache).
+            HeroMeshRescanIntervalFrames = 4;
             DumpDiscoveredTextures = false;
         }
 

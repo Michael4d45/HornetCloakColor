@@ -8,8 +8,8 @@
   "_comment_mapIcon": "When true, logs SSMP compass/map-icon sync (without cloak scanner noise unless debugLogging is on).",
   "mapIconDebugLogging": false,
 
-  "_comment_heroMesh": "CloakRecolor re-scans the player MeshRenderer list every N frames; material re-apply is still every LateUpdate.",
-  "heroMeshRescanIntervalFrames": 30,
+  "_comment_heroMesh": "CloakRecolor re-scans the player MeshRenderer list every N frames; material re-apply is still every LateUpdate. Lower (e.g. 1) fixes spike-death / attack meshes appearing mid-animation; higher saves CPU.",
+  "heroMeshRescanIntervalFrames": 4,
 
   "_comment_dumpTex": "When true, discovery writes <atlas>-original.png under CloakMasks/<raw collection name>/ (same folder as the mask); missing masks also get an empty transparent <atlas>.png template there. Enable once to dump atlases, then paint masks in-place for that collection (e.g. Player Prefab).",
   "dumpDiscoveredTextures": false

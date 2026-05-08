@@ -13,8 +13,12 @@ namespace HornetCloakColor.Client
     /// Scene-wide fallback: tints orphan <see cref="tk2dSprite"/>s whose atlas has a matching
     /// mask PNG under <c>CloakMasks/</c>.
     ///
-    /// Catches renderers spawned <i>outside</i> <see cref="HeroController"/>'s hierarchy and outside
+    /// Catches renderers spawned <i>outside</i> the local <see cref="HeroController"/> hero hierarchy and outside
     /// SSMP&apos;s <c>Player Container *</c> pooled bodies (those use <see cref="CloakRecolor"/> per player).
+    /// Sprites under <see cref="HeroController.instance"/> are never enrolled: their <c>Awake</c> often runs before
+    /// <see cref="CloakRecolor"/> attaches, which previously left attack meshes on the orphan path while pipeline
+    /// refresh was skipped once <see cref="CloakRecolor"/> existed — breaking dash frames that swap materials without
+    /// <c>UpdateColors</c>.
     /// Examples: steam-vent recoil, item-get pose, <c>Knight Spike Death(Clone)</c>.
     ///
     /// <para>
@@ -81,6 +85,16 @@ namespace HornetCloakColor.Client
             Instance = go.AddComponent<CloakSceneScanner>();
         }
 
+        /// <summary>
+        /// Drops any eligible orphan entries under <paramref name="heroRoot"/> so
+        /// <see cref="CloakRecolor"/> is the sole owner after <see cref="CloakRecolor.Configure"/>.
+        /// </summary>
+        internal static void ReleaseEligibleUnderTransform(Transform? heroRoot)
+        {
+            if (Instance == null || heroRoot == null) return;
+            Instance.RemoveEligibleUnderRoot(heroRoot);
+        }
+
         public static void SetColor(CloakColor color)
         {
             EnsureCreated();
@@ -139,6 +153,27 @@ namespace HornetCloakColor.Client
             ApplyEligibleCache();
         }
 
+        private void RemoveEligibleUnderRoot(Transform root)
+        {
+            for (var i = _eligibleCache.Count - 1; i >= 0; i--)
+            {
+                var renderer = _eligibleCache[i];
+                if (renderer == null)
+                {
+                    _eligibleCache.RemoveAt(i);
+                    continue;
+                }
+
+                if (!IsTransformUnderAncestor(renderer.transform, root))
+                    continue;
+
+                _eligibleCache.RemoveAt(i);
+                _eligibleSet.Remove(renderer);
+                _eligibleSprite.Remove(renderer);
+                CloakMaterialApplier.InvalidateRenderer(renderer);
+            }
+        }
+
         /// <summary>
         /// Called from <see cref="CloakSpawnHookHarmonyPatcher"/> on every <c>tk2dSprite.Awake</c>.
         /// Same-frame eligibility check + immediate apply, so a transient spawn (e.g.
@@ -191,13 +226,18 @@ namespace HornetCloakColor.Client
         }
 
         /// <summary>
-        /// Eligibility check shared by the spawn hook and the periodic scan. Returns the matched
-        /// mask (via <see cref="CloakMaskManager"/>'s caches) when the sprite qualifies, or
-        /// <c>false</c> otherwise. Cheap on warm caches: a previously-seen atlas resolves in O(1)
-        /// without string allocation.
+        /// Whether this sprite may be enrolled in the scene scanner (orphan path). Returns
+        /// <paramref name="wouldLogMissingMask"/> <c>true</c> only when we actually consulted disk/cache
+        /// and found no mask — not when we skip because <see cref="CloakRecolor"/> or SSMP owns the
+        /// hierarchy (those cases must stay silent so logs are not misread as “PNG missing”).
         /// </summary>
-        private bool PassesEligibility(MeshRenderer renderer, tk2dSprite sprite)
+        private static bool TryEvaluateScannerEligibility(
+            MeshRenderer renderer,
+            tk2dSprite sprite,
+            out bool wouldLogMissingMask)
         {
+            wouldLogMissingMask = false;
+
             if (renderer == null || sprite == null) return false;
 
             var shared = renderer.sharedMaterial;
@@ -212,13 +252,20 @@ namespace HornetCloakColor.Client
             // SSMP pooled multiplayer bodies (prefix matches SSMP.Game.Client.PlayerManager).
             if (IsUnderSsmpPlayerContainer(renderer.transform)) return false;
 
+            // Local hero: CloakRecolor attaches after many child tk2d Awakes; do not claim these as orphans.
+            if (IsUnderLocalHero(renderer.transform)) return false;
+
             // Renderers under a CloakRecolor are owned by the per-player path. Compass icons are
             // tinted by the map-mask code; both paths would otherwise stomp on each other.
             if (renderer.GetComponentInParent<CloakRecolor>() != null) return false;
             if (IsCompassIcon(renderer.transform)) return false;
 
             var collectionName = sprite.Collection != null ? (sprite.Collection.name ?? string.Empty) : string.Empty;
-            return CloakMaskManager.TryGetMaskForMainTexture(tex, collectionName, out _);
+            if (CloakMaskManager.TryGetMaskForMainTexture(tex, collectionName, out _))
+                return true;
+
+            wouldLogMissingMask = true;
+            return false;
         }
 
         /// <summary>
@@ -232,9 +279,10 @@ namespace HornetCloakColor.Client
             if (renderer == null) return;
             if (_eligibleSet.Contains(renderer)) return;
 
-            if (!PassesEligibility(renderer, sprite))
+            if (!TryEvaluateScannerEligibility(renderer, sprite, out var wouldLogMissingMask))
             {
-                MaybeLogIgnoredTexture(renderer, sprite);
+                if (wouldLogMissingMask)
+                    MaybeLogIgnoredTexture(renderer, sprite);
                 return;
             }
 
@@ -264,8 +312,8 @@ namespace HornetCloakColor.Client
 
         /// <summary>
         /// Logs <c>[Scanner] Ignored texture (no CloakMasks PNG): ...</c> at most once per
-        /// unique atlas, gated by <c>debugLogging</c>. Lets users identify which textures need
-        /// a mask PNG without spamming the log for every sprite spawn.
+        /// unique atlas for sprites the scanner <i>would</i> tint if a mask existed — i.e. not hero /
+        /// SSMP-owned renderers (those use <see cref="CloakRecolor"/>). Gated by <c>debugLogging</c>.
         /// </summary>
         private void MaybeLogIgnoredTexture(MeshRenderer renderer, tk2dSprite sprite)
         {
@@ -370,6 +418,24 @@ namespace HornetCloakColor.Client
         {
             if (t == null) return false;
             return t.name.StartsWith("Compass Icon", StringComparison.Ordinal);
+        }
+
+        private static bool IsTransformUnderAncestor(Transform t, Transform ancestor)
+        {
+            for (var p = t; p != null; p = p.parent)
+            {
+                if (p == ancestor)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsUnderLocalHero(Transform t)
+        {
+            var hero = HeroController.instance;
+            if (hero == null) return false;
+            return IsTransformUnderAncestor(t, hero.transform);
         }
 
         /// <summary>
