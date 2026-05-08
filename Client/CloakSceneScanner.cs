@@ -70,7 +70,7 @@ namespace HornetCloakColor.Client
 
         /// <summary>Renderers we've matched as scanner-tinted; walked every frame (cheap, memoized).</summary>
         private readonly List<MeshRenderer> _eligibleCache = new();
-        private readonly Dictionary<MeshRenderer, tk2dSprite> _eligibleSprite = new();
+        private readonly Dictionary<MeshRenderer, tk2dBaseSprite> _eligibleSprite = new();
         private readonly HashSet<MeshRenderer> _eligibleSet = new();
 
         private bool _eligibleCacheDirty = true;
@@ -190,7 +190,7 @@ namespace HornetCloakColor.Client
         /// Harmony postfix after tk2d updates materials — refreshes orphan sprites that already
         /// passed eligibility or tries enrollment once <see cref="MeshRenderer.sharedMaterial"/> is valid.
         /// </summary>
-        internal static void OnTk2dPipelineComplete(tk2dSprite sprite)
+        internal static void OnTk2dPipelineComplete(tk2dBaseSprite sprite)
         {
             if (Instance == null || sprite == null)
                 return;
@@ -233,7 +233,7 @@ namespace HornetCloakColor.Client
         /// </summary>
         private static bool TryEvaluateScannerEligibility(
             MeshRenderer renderer,
-            tk2dSprite sprite,
+            tk2dBaseSprite sprite,
             out bool wouldLogMissingMask)
         {
             wouldLogMissingMask = false;
@@ -273,7 +273,7 @@ namespace HornetCloakColor.Client
         /// renderer is already tracked or doesn't qualify. Diagnostic logging is gated by
         /// <c>debugLogging</c> and deduplicated per-texture / per-renderer.
         /// </summary>
-        private void TryEnrollEligible(tk2dSprite sprite, string source)
+        private void TryEnrollEligible(tk2dBaseSprite sprite, string source)
         {
             var renderer = sprite.GetComponent<MeshRenderer>();
             if (renderer == null) return;
@@ -315,7 +315,7 @@ namespace HornetCloakColor.Client
         /// unique atlas for sprites the scanner <i>would</i> tint if a mask existed — i.e. not hero /
         /// SSMP-owned renderers (those use <see cref="CloakRecolor"/>). Gated by <c>debugLogging</c>.
         /// </summary>
-        private void MaybeLogIgnoredTexture(MeshRenderer renderer, tk2dSprite sprite)
+        private void MaybeLogIgnoredTexture(MeshRenderer renderer, tk2dBaseSprite sprite)
         {
             if (!CloakPaletteConfig.DebugLogging) return;
             var shared = renderer.sharedMaterial;

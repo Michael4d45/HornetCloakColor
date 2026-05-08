@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using HornetCloakColor.Shared;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace HornetCloakColor.Client
 {
@@ -10,15 +11,16 @@ namespace HornetCloakColor.Client
     /// inactive objects). Some Hornet animations use separate renderers or layers; only
     /// touching the root missed those frames.
     ///
-    /// This component owns the renderers in its own hierarchy. <see cref="CloakSceneScanner"/>
+    /// This component owns the renderers in its hierarchy. <see cref="CloakSceneScanner"/>
     /// applies the same cloak treatment to orphan <c>tk2dSprite</c>s whose atlases have
     /// mask PNGs under <c>CloakMasks/</c>.
     ///
     /// Mesh renderers are cached and the hierarchy is re-scanned every
     /// <see cref="CloakPaletteConfig.HeroMeshRescanIntervalFrames"/> (default 4) instead of every frame,
     /// while <see cref="CloakMaterialApplier.Apply"/> still runs every <c>LateUpdate</c> so tk2d material swaps stay tinted.
-    /// One <see cref="Camera.onPreRender"/> callback per frame runs after all LateUpdates so tk2d cannot restore vanilla
-    /// materials later in the same frame (common on sprint / Witch dash).
+    /// Pre-draw: <see cref="Camera.onPreRender"/> on the built-in render pipeline; on SRP,
+    /// <see cref="RenderPipelineManager.beginCameraRendering"/> (registered only when a scriptable pipeline asset is set).
+    /// Both run after LateUpdate so tk2d cannot restore vanilla materials later in the same frame (common on sprint / Witch dash).
     /// Sprites touched via <see cref="ApplyFromTk2dPipeline"/> register their <see cref="MeshRenderer"/> immediately so
     /// crest-specific attack subtrees tint even before the next periodic rescan.
     /// </summary>
@@ -27,8 +29,9 @@ namespace HornetCloakColor.Client
     internal class CloakRecolor : MonoBehaviour
     {
         private static readonly List<CloakRecolor> ActiveInstances = new();
-        private static bool _cameraPreRenderHooked;
-        private static int _lastCameraPreRenderFrame = -1;
+        /// <summary>Bit 1 = built-in <see cref="Camera.onPreRender"/>; bit 2 = SRP <see cref="RenderPipelineManager.beginCameraRendering"/>.</summary>
+        private static byte _preDrawHookRegistration;
+        private static int _lastPreDrawTintFrame = -1;
 
         public CloakColor Color { get; private set; } = CloakColor.Default;
         public bool UseCloakShader { get; private set; } = true;
@@ -45,7 +48,7 @@ namespace HornetCloakColor.Client
         /// Called from <see cref="CloakTk2dHarmonyPatcher"/> immediately after tk2d finishes updating
         /// this sprite (LateUpdate / Start / OnEnable).
         /// </summary>
-        internal void ApplyFromTk2dPipeline(tk2dSprite sprite)
+        internal void ApplyFromTk2dPipeline(tk2dBaseSprite sprite)
         {
             var meshRenderer = sprite.GetComponent<MeshRenderer>();
             if (meshRenderer == null)
@@ -79,29 +82,84 @@ namespace HornetCloakColor.Client
             _meshCacheInvalid = true;
             if (!ActiveInstances.Contains(this))
                 ActiveInstances.Add(this);
-            if (!_cameraPreRenderHooked)
-            {
-                Camera.onPreRender += OnCameraPreRenderStatic;
-                _cameraPreRenderHooked = true;
-            }
+            EnsurePreDrawTintHooks();
         }
 
         private void OnDisable()
         {
             ActiveInstances.Remove(this);
-            if (ActiveInstances.Count == 0 && _cameraPreRenderHooked)
+            TeardownPreDrawTintHooksIfIdle();
+        }
+
+        private static void EnsurePreDrawTintHooks()
+        {
+            if (_preDrawHookRegistration != 0)
+                return;
+
+            Camera.onPreRender += OnBuiltInCameraPreRender;
+            _preDrawHookRegistration |= 1;
+
+            if (GraphicsSettings.defaultRenderPipeline != null)
             {
-                Camera.onPreRender -= OnCameraPreRenderStatic;
-                _cameraPreRenderHooked = false;
+                RenderPipelineManager.beginCameraRendering += OnSrpBeginCameraRendering;
+                _preDrawHookRegistration |= 2;
             }
         }
 
-        private static void OnCameraPreRenderStatic(Camera _)
+        private static void TeardownPreDrawTintHooksIfIdle()
+        {
+            if (ActiveInstances.Count > 0 || _preDrawHookRegistration == 0)
+                return;
+
+            if ((_preDrawHookRegistration & 1) != 0)
+                Camera.onPreRender -= OnBuiltInCameraPreRender;
+            if ((_preDrawHookRegistration & 2) != 0)
+                RenderPipelineManager.beginCameraRendering -= OnSrpBeginCameraRendering;
+            _preDrawHookRegistration = 0;
+        }
+
+        private static void OnBuiltInCameraPreRender(Camera cam)
+        {
+            if (!IsGameplayCameraForPreDrawTint(cam))
+                return;
+
+            RunPreDrawTintPass();
+        }
+
+        private static void OnSrpBeginCameraRendering(ScriptableRenderContext _, Camera cam)
+        {
+            if (!IsGameplayCameraForPreDrawTint(cam))
+                return;
+
+            RunPreDrawTintPass();
+        }
+
+        /// <summary>
+        /// Which cameras may drive the post–LateUpdate tint pass.
+        /// When <see cref="Camera.main"/> is set (MainCamera tag), we use only that camera so UI or secondary cams
+        /// do not each trigger redundant callbacks (work is still deduped per frame, but this avoids extra noise).
+        /// When <see cref="Camera.main"/> is <c>null</c> — common in Silksong for long stretches — <b>every enabled
+        /// camera</b> is eligible; that is normal for this game, not a degraded mode. Per-frame dedup in
+        /// <see cref="RunPreDrawTintPass"/> runs the actual mesh work once per frame.
+        /// </summary>
+        private static bool IsGameplayCameraForPreDrawTint(Camera? cam)
+        {
+            if (cam == null || !cam.enabled)
+                return false;
+
+            var main = Camera.main;
+            if (main != null)
+                return ReferenceEquals(cam, main);
+
+            return true;
+        }
+
+        private static void RunPreDrawTintPass()
         {
             var frame = Time.frameCount;
-            if (frame == _lastCameraPreRenderFrame)
+            if (frame == _lastPreDrawTintFrame)
                 return;
-            _lastCameraPreRenderFrame = frame;
+            _lastPreDrawTintFrame = frame;
 
             for (var i = ActiveInstances.Count - 1; i >= 0; i--)
             {
@@ -197,6 +255,25 @@ namespace HornetCloakColor.Client
 
             if (_meshCacheSet.Add(meshRenderer))
                 _meshCache.Add(meshRenderer);
+        }
+
+        /// <summary>
+        /// Same-frame tint when a hero <see cref="MeshRenderer"/> is spawned or enabled after <see cref="LateUpdate"/>
+        /// (e.g. Witch dash stab meshes). Uses <see cref="CloakMaterialApplier.ResolveTk2dSprite"/> for mask collection.
+        /// </summary>
+        internal void RefreshMeshRendererNow(MeshRenderer mr)
+        {
+            if (mr == null || IsUnderSsmpUsernameObject(mr.transform))
+                return;
+
+            EnsureMeshRendererTracked(mr);
+            CloakMaterialApplier.InvalidateRenderer(mr);
+            CloakMaterialApplier.Apply(
+                mr,
+                CloakMaterialApplier.ResolveTk2dSprite(mr),
+                Color,
+                UseCloakShader,
+                _originalShaderByRenderer);
         }
 
         private void ApplyToCachedMeshRenderersCore()

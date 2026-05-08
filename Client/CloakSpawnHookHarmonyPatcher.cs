@@ -1,6 +1,7 @@
 using System;
 using HarmonyLib;
 using HornetCloakColor.Shared;
+using UnityEngine;
 
 namespace HornetCloakColor.Client
 {
@@ -62,6 +63,14 @@ namespace HornetCloakColor.Client
         {
             try
             {
+                var recolor = __instance.GetComponentInParent<CloakRecolor>();
+                if (recolor != null)
+                {
+                    var mr = __instance.GetComponent<MeshRenderer>();
+                    if (mr != null)
+                        recolor.RefreshMeshRendererNow(mr);
+                }
+
                 CloakSceneScanner.OnSpriteSpawned(__instance);
             }
             catch (Exception ex)

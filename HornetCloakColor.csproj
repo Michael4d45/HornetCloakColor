@@ -32,6 +32,10 @@
     <Compile Remove="HornetCloakColor.SSMP/**" />
     <None Remove="HornetCloakColor.SSMP/**" />
     <EmbeddedResource Remove="HornetCloakColor.SSMP/**" />
+    <!-- Nested tool projects under _tools/ have their own obj/*.cs; SDK **/*.cs glob would compile them here and duplicate assembly attributes (CS0579). -->
+    <Compile Remove="_tools/**" />
+    <None Remove="_tools/**" />
+    <EmbeddedResource Remove="_tools/**" />
   </ItemGroup>
 
   <ItemGroup>

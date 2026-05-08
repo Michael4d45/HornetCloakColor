@@ -1,7 +1,8 @@
 // Shader: HornetCloakColor/CloakHueShift
 //
-// Recolor weight comes only from _CloakMaskTex (R channel, 0–1). User tint via _TargetHue/_TargetSat/_TargetVal;
-// matched weight scales HSV toward that tint (value preserved for shading).
+// Per-pixel blend weight = mask luminosity at the same UV as _MainTex. The fragment shader reads tex2D(_CloakMaskTex).r;
+// for a typical greyscale PNG, R=G=B so .r is just the grey level (any channel would match). Multiply by _Strength from C#.
+// User tint via _TargetHue/_TargetSat/_TargetVal; lerp original RGB toward recolored RGB by that weight, then multiply by vertex color.
 Shader "HornetCloakColor/CloakHueShift"
 {
     Properties
@@ -15,7 +16,7 @@ Shader "HornetCloakColor/CloakHueShift"
 
         _Strength ("Recolor Strength", Range(0,1)) = 1.0
 
-        [NoScaleOffset] _CloakMaskTex ("Cloak Mask (R = weight)", 2D) = "white" {}
+        [NoScaleOffset] _CloakMaskTex ("Cloak Mask (greyscale / luminosity → blend weight)", 2D) = "white" {}
     }
 
     SubShader
@@ -114,6 +115,4 @@ Shader "HornetCloakColor/CloakHueShift"
             ENDCG
         }
     }
-
-    Fallback "Sprites/Default"
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using HarmonyLib;
 using HornetCloakColor.Shared;
@@ -12,8 +13,9 @@ namespace HornetCloakColor.Client
     /// Silksong's tk2d types inherit Unity lifecycle methods (<see cref="MonoBehaviour.LateUpdate"/>, etc.)
     /// without redeclaring them, so declaring-type-only lookup on
     /// <c>tk2dSprite</c> alone finds nothing. We patch every relevant method **declared** on
-    /// <see cref="tk2dSprite"/> and <see cref="tk2dBaseSprite"/> (e.g. mesh build), which is tk2d-specific and
-    /// avoids patching <see cref="MonoBehaviour.LateUpdate"/> for the entire game.
+    /// <see cref="tk2dSprite"/>, <see cref="tk2dBaseSprite"/>, and other concrete <c>tk2d*</c> subclasses
+    /// (e.g. <c>tk2dAnimatedSprite.BuildMesh</c>) — Silksong attack/dash frames often rebuild there without
+    /// calling <c>tk2dSprite.UpdateColors</c>, which left only that hook (see BepInEx log).
     ///
     /// <para>
     /// <c>Awake</c> is omitted here — <see cref="CloakSpawnHookHarmonyPatcher"/> already postfixes <c>Awake</c> for
@@ -50,52 +52,161 @@ namespace HornetCloakColor.Client
             var seen = new HashSet<string>(StringComparer.Ordinal);
             var patched = 0;
 
-            foreach (var type in new[] { typeof(tk2dSprite), typeof(tk2dBaseSprite) })
+            foreach (var type in EnumerateTk2dSpritePipelineTypes())
             {
                 foreach (var methodName in Tk2dDeclaredPipelineNames)
                 {
-                    // Use raw reflection — Harmony's AccessTools.DeclaredMethod logs a Warning on every miss, which
-                    // spams the console when most names exist only on MonoBehaviour or use different signatures.
-                    var method = GetDeclaredInstanceMethodNoParams(type, methodName);
-                    if (method == null || !CanHarmonyDetour(method))
-                        continue;
-
-                    var key = $"{method.MetadataToken:X8}:{method.DeclaringType!.AssemblyQualifiedName}";
-                    if (!seen.Add(key))
-                        continue;
-
-                    try
-                    {
-                        harmony.Patch(method, postfix: postfix);
-                        patched++;
-                        Log.Info($"HornetCloakColor: hooked {method.DeclaringType!.Name}.{methodName} for post-tk2d cloak apply.");
-                    }
-                    catch (Exception ex)
-                    {
-                        // Common when Unity/tk2d exposes extern or runtime-internal stubs (no IL body).
-                        Log.Warn(
-                            $"HornetCloakColor: skipped {method.DeclaringType?.Name}.{methodName} — Harmony cannot detour it ({ex.GetType().Name}: {ex.Message}).");
-                    }
+                    // Patch every declared overload (e.g. BuildMesh() vs BuildMesh(bool)), not only the first match.
+                    foreach (var method in EnumerateDeclaredPipelineMethods(type, methodName))
+                        TryPatchPipelineMethod(harmony, postfix, method, seen, ref patched);
                 }
             }
+
+            // console-16: tk2dAnimatedSprite had only OnEnable/Start — frame advances often use inherited
+            // BuildMesh/UpdateMesh on tk2dSprite without redeclaring UpdateColors on the animated type.
+            foreach (var extraName in new[] { "BuildMesh", "UpdateMesh", "UpdateVertices", "SwitchClip" })
+            {
+                foreach (var method in EnumerateInheritedChainMethods(typeof(tk2dAnimatedSprite), extraName))
+                    TryPatchPipelineMethod(harmony, postfix, method, seen, ref patched);
+            }
+
+            foreach (var method in EnumerateAnimatedSpriteDeclaredMeshCandidates())
+                TryPatchPipelineMethod(harmony, postfix, method, seen, ref patched);
 
             _applied = true;
 
             if (patched == 0)
             {
                 Log.Warn(
-                    "HornetCloakColor: no tk2dSprite/tk2dBaseSprite pipeline methods were patched — cloak tint may lag " +
+                    "HornetCloakColor: no tk2d pipeline methods were patched — cloak tint may lag " +
                     "until CloakRecolor mesh rescans or hero damage refresh. Report Silksong tk2d API changes to the mod author.");
             }
         }
 
-        private static MethodInfo? GetDeclaredInstanceMethodNoParams(Type type, string name) =>
-            type.GetMethod(
-                name,
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly,
-                binder: null,
-                types: Type.EmptyTypes,
-                modifiers: null);
+        /// <summary>
+        /// Includes subclasses (animated/clipped/etc.) where <c>BuildMesh</c> overrides actually live in this build.
+        /// </summary>
+        private static IEnumerable<Type> EnumerateTk2dSpritePipelineTypes()
+        {
+            var root = typeof(tk2dBaseSprite);
+            yield return root;
+            yield return typeof(tk2dSprite);
+
+            Assembly asm;
+            try
+            {
+                asm = root.Assembly;
+            }
+            catch
+            {
+                yield break;
+            }
+
+            Type[] types;
+            try
+            {
+                types = asm.GetTypes();
+            }
+            catch (ReflectionTypeLoadException e)
+            {
+                types = e.Types.Where(t => t != null).Cast<Type>().ToArray();
+            }
+
+            foreach (var t in types)
+            {
+                if (t.IsAbstract || !t.IsClass || !root.IsAssignableFrom(t))
+                    continue;
+
+                if (!t.Name.StartsWith("tk2d", StringComparison.Ordinal))
+                    continue;
+
+                if (t == root || t == typeof(tk2dSprite))
+                    continue;
+
+                yield return t;
+            }
+        }
+
+        private static IEnumerable<MethodInfo> EnumerateDeclaredPipelineMethods(Type type, string name)
+        {
+            foreach (var m in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+            {
+                if (m.Name == name)
+                    yield return m;
+            }
+        }
+
+        /// <summary>
+        /// Walk <paramref name="leaf"/> → bases up to <see cref="tk2dBaseSprite"/> and yield every overload of
+        /// <paramref name="name"/> declared on each level (virtual overrides show up on the declaring type).
+        /// </summary>
+        private static IEnumerable<MethodInfo> EnumerateInheritedChainMethods(Type leaf, string name)
+        {
+            var root = typeof(tk2dBaseSprite);
+            for (var t = leaf; t != null && root.IsAssignableFrom(t); t = t.BaseType)
+            {
+                foreach (var m in EnumerateDeclaredPipelineMethods(t, name))
+                    yield return m;
+            }
+        }
+
+        /// <summary>
+        /// Silksong-specific helpers on <see cref="tk2dAnimatedSprite"/> that do not match our fixed name list.
+        /// </summary>
+        private static IEnumerable<MethodInfo> EnumerateAnimatedSpriteDeclaredMeshCandidates()
+        {
+            var animated = typeof(tk2dAnimatedSprite);
+            foreach (var m in animated.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+            {
+                if (m.IsSpecialName)
+                    continue;
+
+                var n = m.Name;
+                if (n.Contains("Mesh", StringComparison.Ordinal))
+                    yield return m;
+
+                if (n.Contains("Build", StringComparison.Ordinal) && !n.Contains("Rebuild", StringComparison.Ordinal))
+                    yield return m;
+            }
+        }
+
+        private static void TryPatchPipelineMethod(
+            Harmony harmony,
+            HarmonyMethod postfix,
+            MethodInfo method,
+            HashSet<string> seen,
+            ref int patched)
+        {
+            if (!CanHarmonyDetour(method))
+                return;
+
+            var key = $"{method.MetadataToken:X8}:{method.DeclaringType!.AssemblyQualifiedName}";
+            if (!seen.Add(key))
+                return;
+
+            var label = $"{method.DeclaringType!.Name}.{FormatMethodSignature(method)}";
+
+            try
+            {
+                harmony.Patch(method, postfix: postfix);
+                patched++;
+                Log.Info($"HornetCloakColor: hooked {label} for post-tk2d cloak apply.");
+            }
+            catch (Exception ex)
+            {
+                Log.Warn(
+                    $"HornetCloakColor: skipped {label} — Harmony cannot detour it ({ex.GetType().Name}: {ex.Message}).");
+            }
+        }
+
+        private static string FormatMethodSignature(MethodInfo m)
+        {
+            var ps = m.GetParameters();
+            if (ps.Length == 0)
+                return m.Name;
+
+            return $"{m.Name}({string.Join(",", ps.Select(p => p.ParameterType.Name))})";
+        }
 
         /// <summary>
         /// Harmony/MonoMod requires a real IL body; some declared tk2d methods are extern or otherwise unstoppable.
@@ -124,12 +235,14 @@ namespace HornetCloakColor.Client
 
         private static void Tk2dSprite_Postfix(MonoBehaviour __instance, MethodBase __originalMethod)
         {
-            if (__instance is not tk2dSprite sprite)
+            // Patches are attached to methods declared on tk2dSprite and tk2dBaseSprite; the runtime
+            // instance may be a subtype that does not inherit tk2dSprite (e.g. some clipped/tiled sprites).
+            if (__instance is not tk2dBaseSprite sprite)
                 return;
 
             try
             {
-                PostTk2dSprite(sprite, __originalMethod?.Name);
+                PostTk2dBaseSprite(sprite, __originalMethod?.Name);
             }
             catch (Exception ex)
             {
@@ -137,7 +250,7 @@ namespace HornetCloakColor.Client
             }
         }
 
-        private static void PostTk2dSprite(tk2dSprite sprite, string? patchedMethodName)
+        private static void PostTk2dBaseSprite(tk2dBaseSprite sprite, string? patchedMethodName)
         {
             var recolor = sprite.GetComponentInParent<CloakRecolor>();
             if (recolor != null)

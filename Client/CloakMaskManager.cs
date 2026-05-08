@@ -9,8 +9,10 @@ namespace HornetCloakColor.Client
 {
     /// <summary>
     /// Per-atlas R masks under <c>CloakMasks/&lt;raw tk2d collection name&gt;/&lt;MainTex.name&gt;.png</c>,
-    /// then compatibility alias (e.g. <c>Player Prefab</c> → <c>Knight</c>). No heuristic searching — paths must match exactly.
-    /// Weights drive the in-game cloak shader; missing files mean that atlas is left untouched.
+    /// then compatibility alias (e.g. <c>Player Prefab</c> → <c>Knight</c>). Paths must match exactly.
+    /// When the PNG for an atlas is missing, we may write <c>&lt;atlas&gt;-original.png</c> and an empty <c>&lt;atlas&gt;.png</c>
+    /// template (see <see cref="CloakPaletteConfig.MissingMaskDumpAllowlist"/>). The same applies to
+    /// <c>CloakMasks/Texture2D/&lt;stem&gt;.png</c> when that file is missing.
     /// </summary>
     internal static class CloakMaskManager
     {
@@ -125,6 +127,14 @@ namespace HornetCloakColor.Client
 
             if (!File.Exists(path))
             {
+                // Gate on the lookup key for this path (<paramref name="name"/> — sprite vs atlas),
+                // not referenceTexture.name. Shared atlases use one Texture for many sprites; the second
+                // TryGetTexture2DMaskByName pass uses sprite.name as <paramref name="name"/> while
+                // referenceTexture.name stays the allowlisted atlas → wrong dumps for every UI sub-sprite.
+                if (referenceTexture != null && referenceTexture.width > 0 && referenceTexture.height > 0
+                    && CloakPaletteConfig.ShouldAutoDumpMissingMask(name))
+                    MaybeDumpDiscoveredTextureFiles(referenceTexture, path, createEmptyMask: true, missingMaskAutoDump: true);
+
                 ByTexture2DMaskName[path] = null;
                 return false;
             }
@@ -151,11 +161,75 @@ namespace HornetCloakColor.Client
             maskTex.name = $"CloakMask:Texture2D/{stem}";
             ByTexture2DMaskName[path] = maskTex;
 
-            if (referenceTexture != null)
+            // Same stem gate as missing-mask dumps — prevents CloakMasks/Texture2D/* floods when
+            // dumpDiscoveredTextures is true but allowlist targets only specific atlas stems.
+            if (referenceTexture != null && CloakPaletteConfig.ShouldAutoDumpMissingMask(name))
                 MaybeDumpDiscoveredTextureFiles(referenceTexture, path, createEmptyMask: false);
 
             mask = maskTex;
             return true;
+        }
+
+        /// <summary>
+        /// Walks loaded <see cref="Texture2D"/> assets (<see cref="Resources.FindObjectsOfTypeAll{T}"/>) whose
+        /// <see cref="Object.name"/> matches <see cref="CloakPaletteConfig.MissingMaskDumpAllowlist"/> and dumps missing-mask
+        /// files under <c>CloakMasks/Texture2D/&lt;stem&gt;.png</c> when that PNG is absent — same as binding-time Texture2D dumps.
+        /// Requires <c>dumpDiscoveredTextures</c> in <c>cloak_palette.json</c>. Cannot dump textures Unity has never loaded;
+        /// schedule delayed sweeps in <c>cloak_palette.json</c> or open menus / areas first.
+        /// </summary>
+        public static void SweepAllowlistedLoadedTexturesForMissingMaskDumps()
+        {
+            var allow = CloakPaletteConfig.MissingMaskDumpAllowlist;
+            if (allow == null || allow.Count == 0 || string.IsNullOrEmpty(PluginDir))
+                return;
+
+            if (!CloakPaletteConfig.DumpDiscoveredTextures)
+                return;
+
+            var texes = Resources.FindObjectsOfTypeAll<Texture2D>();
+            var dumped = 0;
+            var matchedAllowlistInMemory = 0;
+            var skippedMaskPngAlreadyOnDisk = 0;
+            foreach (var tex in texes)
+            {
+                if (tex == null || tex.width <= 0 || tex.height <= 0)
+                    continue;
+
+                var stem = CloakDiskNames.SanitizeFileStem(tex.name);
+                if (stem.Length == 0 || !allow.Contains(stem))
+                    continue;
+
+                matchedAllowlistInMemory++;
+
+                var path = Path.Combine(PluginDir, "CloakMasks", "Texture2D", $"{stem}.png");
+                if (File.Exists(path))
+                {
+                    skippedMaskPngAlreadyOnDisk++;
+                    continue;
+                }
+
+                if (!CloakPaletteConfig.ShouldAutoDumpMissingMask(tex.name))
+                    continue;
+
+                MaybeDumpDiscoveredTextureFiles(tex, path, createEmptyMask: true, missingMaskAutoDump: true);
+                dumped++;
+            }
+
+            var msg =
+                $"[CloakMasks] allowlistSweep: scanned {texes.Length} Texture2D asset(s); " +
+                $"allowlisted stem(s) seen in memory: {matchedAllowlistInMemory}; " +
+                $"skipped {skippedMaskPngAlreadyOnDisk} (CloakMasks/Texture2D/*.png already exists); " +
+                $"wrote {dumped} missing-mask dump(s).";
+
+            if (matchedAllowlistInMemory == 0)
+            {
+                msg +=
+                    " No loaded Texture2D.name matched your allowlist — runtime names often differ from dumped PNG filenames, " +
+                    "or those atlases only appear under tk2d (masks live in CloakMasks/<collection>/<stem>.png, not Texture2D/). " +
+                    "Trigger the effect in-game and watch [CloakMasks] missingMaskDump lines, or grep logs for the real tex name.";
+            }
+
+            Log.Info(msg);
         }
 
         private static readonly HashSet<string> MaskDiagLoggedCompositeKeys = new(StringComparer.Ordinal);
@@ -281,7 +355,11 @@ namespace HornetCloakColor.Client
 
             if (maskTex == null)
             {
-                MaybeDumpDiscoveredTextureFiles(mainTex, primaryPath, createEmptyMask: true);
+                MaybeDumpDiscoveredTextureFiles(
+                    mainTex,
+                    primaryPath,
+                    createEmptyMask: true,
+                    missingMaskAutoDump: CloakPaletteConfig.ShouldAutoDumpMissingMask(mainTex.name));
                 ByTextureCollectionKey[compositeKey] = null;
                 if (logDetail)
                 {
@@ -332,14 +410,20 @@ namespace HornetCloakColor.Client
         }
 
         /// <summary>
-        /// When <c>dumpDiscoveredTextures</c> is enabled, writes the source atlas beside the
-        /// desired mask path as <c>&lt;atlas&gt;-original.png</c>. For missing masks, also writes
-        /// an empty transparent <c>&lt;atlas&gt;.png</c> template so the user can paint it in-place.
+        /// Writes <c>&lt;atlas&gt;-original.png</c> beside the mask path. Optionally writes an empty <c>&lt;atlas&gt;.png</c>.
+        /// Does nothing unless <c>dumpDiscoveredTextures</c> is true in <c>cloak_palette.json</c> (master switch for all dumps).
+        /// When enabled, missing-mask writes use <paramref name="missingMaskAutoDump"/> after <see cref="CloakPaletteConfig.ShouldAutoDumpMissingMask"/>.
         /// </summary>
-        private static void MaybeDumpDiscoveredTextureFiles(Texture mainTex, string maskPath, bool createEmptyMask)
+        private static void MaybeDumpDiscoveredTextureFiles(
+            Texture mainTex,
+            string maskPath,
+            bool createEmptyMask,
+            bool missingMaskAutoDump = false)
         {
             if (!CloakPaletteConfig.DumpDiscoveredTextures)
                 return;
+
+            var logTag = missingMaskAutoDump ? "missingMaskDump" : "dumpDiscoveredTextures";
 
             var dir = Path.GetDirectoryName(maskPath);
             var maskStem = Path.GetFileNameWithoutExtension(maskPath);
@@ -352,12 +436,12 @@ namespace HornetCloakColor.Client
                 return;
 
             Directory.CreateDirectory(dir);
-            MaybeWriteOriginalTexture(mainTex, Path.Combine(dir, $"{maskStem}-original.png"), w, h);
+            MaybeWriteOriginalTexture(mainTex, Path.Combine(dir, $"{maskStem}-original.png"), w, h, logTag);
             if (createEmptyMask)
-                MaybeWriteEmptyMask(maskPath, w, h);
+                MaybeWriteEmptyMask(maskPath, w, h, logTag);
         }
 
-        private static void MaybeWriteOriginalTexture(Texture mainTex, string outPath, int w, int h)
+        private static void MaybeWriteOriginalTexture(Texture mainTex, string outPath, int w, int h, string logTag)
         {
             if (DumpedOriginalPaths.Contains(outPath) || File.Exists(outPath))
                 return;
@@ -373,12 +457,12 @@ namespace HornetCloakColor.Client
                 dst.Apply(false, false);
                 File.WriteAllBytes(outPath, dst.EncodeToPNG());
                 DumpedOriginalPaths.Add(outPath);
-                Log.Info($"[CloakMasks] dumpDiscoveredTextures: wrote '{outPath}'.");
+                Log.Info($"[CloakMasks] {logTag}: wrote '{outPath}'.");
                 UnityEngine.Object.Destroy(dst);
             }
             catch (Exception ex)
             {
-                Log.Warn($"[CloakMasks] dumpDiscoveredTextures: could not write '{outPath}': {ex.Message}");
+                Log.Warn($"[CloakMasks] {logTag}: could not write '{outPath}': {ex.Message}");
             }
             finally
             {
@@ -387,7 +471,7 @@ namespace HornetCloakColor.Client
             }
         }
 
-        private static void MaybeWriteEmptyMask(string maskPath, int w, int h)
+        private static void MaybeWriteEmptyMask(string maskPath, int w, int h, string logTag)
         {
             if (DumpedTemplatePaths.Contains(maskPath) || File.Exists(maskPath))
                 return;
@@ -400,12 +484,12 @@ namespace HornetCloakColor.Client
                 mask.Apply(false, false);
                 File.WriteAllBytes(maskPath, mask.EncodeToPNG());
                 DumpedTemplatePaths.Add(maskPath);
-                Log.Info($"[CloakMasks] dumpDiscoveredTextures: wrote empty mask template '{maskPath}'.");
+                Log.Info($"[CloakMasks] {logTag}: wrote empty mask template '{maskPath}'.");
                 UnityEngine.Object.Destroy(mask);
             }
             catch (Exception ex)
             {
-                Log.Warn($"[CloakMasks] dumpDiscoveredTextures: could not write empty mask '{maskPath}': {ex.Message}");
+                Log.Warn($"[CloakMasks] {logTag}: could not write empty mask '{maskPath}': {ex.Message}");
             }
         }
 

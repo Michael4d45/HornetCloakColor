@@ -11,6 +11,34 @@
   "_comment_heroMesh": "CloakRecolor re-scans the player MeshRenderer list every N frames; material re-apply is still every LateUpdate. Lower (e.g. 1) fixes spike-death / attack meshes appearing mid-animation; higher saves CPU.",
   "heroMeshRescanIntervalFrames": 4,
 
-  "_comment_dumpTex": "When true, discovery writes <atlas>-original.png under CloakMasks/<raw collection name>/ (same folder as the mask); missing masks also get an empty transparent <atlas>.png template there. Enable once to dump atlases, then paint masks in-place for that collection (e.g. Player Prefab).",
-  "dumpDiscoveredTextures": false
+  "_comment_dumpTex": "Master switch: when false, no -original.png or empty mask templates are written (allowlist ignored). When true: existing-mask path writes -original.png beside an on-disk mask; missing-mask path uses missingMaskDumpAllowlist.",
+  "dumpDiscoveredTextures": false,
+
+  "_comment_allowDump": "When dumpDiscoveredTextures is true: missing-mask dumps (-original + empty template) only for Texture.name stems in this list (tk2d folders + CloakMasks/Texture2D/). Empty allowlist = no missing-mask auto-dump.",
+  "_comment_allowDump_sactx": "Allowlisted sactx-* stems are for Texture2D sweep/auto-dump when Unity loads a Texture2D with that exact Object.name. They do not replace tk2d masks (CloakMasks/<collection>/atlasN.png). SpriteRenderer-only sequences use CloakMasks/Texture2D/<stem>.png (see CloakSpriteRendererTint).",
+
+  "_comment_allowlistSweep": "When dumpDiscoveredTextures is true: optional missingMaskDumpAllowlistSweepDelaysSec — seconds after load, each value waits then scans loaded Texture2D assets for allowlisted stems still missing CloakMasks/Texture2D/<stem>.png. Example: [10, 120, 600]. Omit or [] to disable.",
+
+  "missingMaskDumpAllowlist": [
+    "sactx-3-2048x2048-BC7-Abyss_Last_Dive-bbfc1606.png",
+    "sactx-0-1024x2048-BC7-Rage_Burst_Effect-a67539f4.png",
+    "sactx-0-1024x2048-BC7-UI-6fff4be6.png",
+    "sactx-0-2048x2048-BC7-Abyss_Last_Dive-bbfc1606.png",
+    "sactx-0-2048x2048-BC7-HUD_evolve-3a10e012.png",
+    "sactx-0-2048x2048-BC7-Silk_Death_Cursed-cf30f656.png",
+    "sactx-0-2048x2048-BC7-Tools-f3fccef6.png",
+    "sactx-0-2048x2048-DXT5_BC3-Heart_Deaths-9bc2e886.png",
+    "sactx-0-4096x2048-BC7-Inventory-585c37fa.png",
+    "sactx-0-4096x4096-BC7-Hornet-edc12abe.png",
+    "sactx-0-4096x8192-BC7-HBone-496f12e3.png",
+    "sactx-0-4096x8192-BC7-Memory-b915953c.png",
+    "sactx-0-4096x8192-BC7-Peak-9f1e44cf.png",
+    "sactx-1-2048x2048-BC7-Abyss_Last_Dive-bbfc1606.png",
+    "sactx-1-2048x2048-BC7-Area_Art-14e3c68a.png",
+    "sactx-1-2048x2048-BC7-Hornet-edc12abe.png",
+    "sactx-1-2048x2048-BC7-Menu-7fcaeb67.png",
+    "sactx-1-2048x2048-DXT5_BC3-Red_Memory-8c67780c.png",
+    "sactx-2-1024x2048-BC7-Beast_Slash-ee356c00.png",
+    "sactx-2-2048x2048-BC7-Abyss_Last_Dive-bbfc1606.png"
+  ]
 }

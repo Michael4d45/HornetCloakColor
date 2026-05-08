@@ -1,5 +1,6 @@
 using System.Collections;
 using BepInEx;
+using UnityEngine;
 using BepInEx.Logging;
 using HornetCloakColor.Client;
 using HornetCloakColor.Shared;
@@ -33,6 +34,10 @@ namespace HornetCloakColor
 
             CloakPaletteConfig.Load();
 
+            var sweepDelays = CloakPaletteConfig.MissingMaskDumpAllowlistSweepDelaysSec;
+            if (sweepDelays != null && sweepDelays.Length > 0)
+                StartCoroutine(AllowlistMissingMaskSweepRoutine(sweepDelays));
+
             // Stand up the scene-wide scanner before the hero loads so orphan Hornet
             // renderers (steam-vent recoil, item-get pose, etc.) get tinted as soon as
             // they appear, even if the hero's hierarchy never owns them.
@@ -49,6 +54,7 @@ namespace HornetCloakColor
             // and never get tinted — the visible "sometimes she's tinted, sometimes not" bug.
             CloakSpawnHookHarmonyPatcher.Apply();
             CloakTk2dHarmonyPatcher.Apply();
+            CloakMeshRendererEnableHarmonyPatcher.Apply();
             CloakHeroDamageHarmonyPatcher.Apply();
 
             // SSMP may load after this plugin; username tint needs its types + satellite registration.
@@ -63,6 +69,21 @@ namespace HornetCloakColor
             HeroController.OnHeroInstanceSet += OnHeroInstanceSet;
 
             Logger.LogInfo($"{Name} v{ModVersion} loaded.");
+        }
+
+        /// <summary>
+        /// Runs <see cref="CloakMaskManager.SweepAllowlistedLoadedTexturesForMissingMaskDumps"/> after each delay so atlases
+        /// that load later (menus, scene loads) still get a chance to dump without binding every sprite first.
+        /// </summary>
+        private IEnumerator AllowlistMissingMaskSweepRoutine(float[] delaysSec)
+        {
+            foreach (var sec in delaysSec)
+            {
+                if (sec > 0f)
+                    yield return new WaitForSecondsRealtime(sec);
+
+                CloakMaskManager.SweepAllowlistedLoadedTexturesForMissingMaskDumps();
+            }
         }
 
         /// <summary>

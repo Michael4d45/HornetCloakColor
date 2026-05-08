@@ -80,9 +80,41 @@ namespace HornetCloakColor.Client
             }
         }
 
+        /// <summary>
+        /// tk2d usually puts <see cref="tk2dBaseSprite"/> on the same GameObject as the <see cref="MeshRenderer"/>.
+        /// Some attack prefabs put the mesh on one child and the sprite on the parent or a <b>sibling</b> child;
+        /// <see cref="UnityEngine.Component.GetComponentInParent{T}"/> alone does not see siblings, so we walk the
+        /// parent’s other children here. Mask lookup needs that sprite’s <see cref="tk2dBaseSprite.Collection"/>.
+        /// </summary>
+        internal static tk2dBaseSprite? ResolveTk2dSprite(MeshRenderer renderer)
+        {
+            if (renderer == null) return null;
+
+            var t = renderer.transform;
+            var c = t.GetComponent<tk2dBaseSprite>();
+            if (c != null) return c;
+
+            if (t.parent != null)
+            {
+                var onParent = t.parent.GetComponent<tk2dBaseSprite>();
+                if (onParent != null) return onParent;
+
+                for (var i = 0; i < t.parent.childCount; i++)
+                {
+                    var child = t.parent.GetChild(i);
+                    if (child == t) continue;
+
+                    c = child.GetComponent<tk2dBaseSprite>();
+                    if (c != null) return c;
+                }
+            }
+
+            return t.GetComponentInParent<tk2dBaseSprite>();
+        }
+
         public static void Apply(
             MeshRenderer renderer,
-            tk2dSprite? sprite,
+            tk2dBaseSprite? sprite,
             CloakColor color,
             bool useCloakShader,
             Dictionary<MeshRenderer, Shader> originalShaderByRenderer)
@@ -113,7 +145,7 @@ namespace HornetCloakColor.Client
                     if (prev.Mode == AppliedMode.NoMaskRestored)
                     {
                         var texEarly = sharedCheck.mainTexture;
-                        var sprEarly = sprite ?? renderer.GetComponent<tk2dSprite>();
+                        var sprEarly = sprite ?? ResolveTk2dSprite(renderer);
                         var collName = sprEarly?.Collection != null ? sprEarly.Collection.name : null;
                         if (texEarly != null && CloakMaskManager.IsMaskConfirmedAbsentForBinding(texEarly, collName))
                             return;
@@ -124,6 +156,13 @@ namespace HornetCloakColor.Client
                     return;
                 }
             }
+
+            sprite ??= ResolveTk2dSprite(renderer);
+
+            // Do not call SetPropertyBlock(null): our Harmony postfix runs immediately after tk2d
+            // UpdateColors/BuildMesh, which push flash/damage tints via MPB for Sprites/Default-ColorFlash.
+            // Clearing here gutted dash-attack and hit-flash visuals while the mesh still used that shader
+            // for a frame, and removed data CloakHueShift-compatible blocks may still need at draw.
 
             // .material clones once and returns the per-renderer instance on subsequent calls,
             // so this is cheap once the renderer has been touched.
@@ -137,8 +176,6 @@ namespace HornetCloakColor.Client
                 AppliedByRenderer.Remove(rendererId);
                 return;
             }
-
-            sprite ??= renderer.GetComponent<tk2dSprite>();
 
             AppliedMode finalMode;
             CloakColor finalColor = color;
@@ -232,12 +269,10 @@ namespace HornetCloakColor.Client
             if (tex != null) mat.mainTexture = tex;
         }
 
-        private static void ApplyShaderProperties(Material mat, tk2dSprite? sprite, CloakColor color, Texture2D mask)
+        private static void ApplyShaderProperties(Material mat, tk2dBaseSprite? sprite, CloakColor color, Texture2D mask)
         {
-            // The cloak shader reads vertex/tk2d color as a multiplier; force white so the
-            // user-chosen tint isn't darkened by a leftover sprite color.
-            if (sprite != null && sprite.color != Color.white)
-                sprite.color = Color.white;
+            // Keep sprite.vertex color as authored (attack flashes, tk2d animation). The fragment
+            // shader multiplies by IN.color; stomping to white broke dash/hit presentation.
 
             if (color.Equals(CloakColor.Default))
             {
@@ -256,7 +291,7 @@ namespace HornetCloakColor.Client
             mat.SetTexture(CloakShaderManager.CloakMaskTexId, mask);
         }
 
-        private static void ApplyVertexTint(Material mat, tk2dSprite? sprite, CloakColor color)
+        private static void ApplyVertexTint(Material mat, tk2dBaseSprite? sprite, CloakColor color)
         {
             var unityColor = color.ToUnityColor();
             if (sprite != null) sprite.color = unityColor;
