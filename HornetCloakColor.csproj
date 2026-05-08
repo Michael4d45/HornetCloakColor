@@ -87,12 +87,13 @@
   </Target>
 
   <Target Name="CopyAndPackageMod" AfterTargets="PostBuildEvent">
+    <!-- Thunderstore: ship under BepInEx/plugins/ in the zip (wiki packaging-your-mods) so subfolders like CloakMasks/ are preserved on install. -->
     <ItemGroup>
-      <Binaries Include="$(TargetPath)" LocalDir="/" PackDir="/" />
-      <Binaries Include="$(TargetDir)/$(TargetName).pdb" LocalDir="/" PackDir="/" />
-      <Binaries Include="$(TargetDir)HornetCloakColor.SSMP.dll" LocalDir="/" PackDir="/" Condition="Exists('$(TargetDir)HornetCloakColor.SSMP.dll')" />
-      <Binaries Include="$(TargetDir)HornetCloakColor.SSMP.pdb" LocalDir="/" PackDir="/" Condition="Exists('$(TargetDir)HornetCloakColor.SSMP.pdb')" />
-      <Binaries Include="$(TargetDir)/cloak_palette.json" LocalDir="/" PackDir="/" Condition="Exists('$(TargetDir)/cloak_palette.json')" />
+      <Binaries Include="$(TargetPath)" LocalDir="/" PackDir="BepInEx/plugins" />
+      <Binaries Include="$(TargetDir)/$(TargetName).pdb" LocalDir="/" PackDir="BepInEx/plugins" />
+      <Binaries Include="$(TargetDir)HornetCloakColor.SSMP.dll" LocalDir="/" PackDir="BepInEx/plugins" Condition="Exists('$(TargetDir)HornetCloakColor.SSMP.dll')" />
+      <Binaries Include="$(TargetDir)HornetCloakColor.SSMP.pdb" LocalDir="/" PackDir="BepInEx/plugins" Condition="Exists('$(TargetDir)HornetCloakColor.SSMP.pdb')" />
+      <Binaries Include="$(TargetDir)/cloak_palette.json" LocalDir="/" PackDir="BepInEx/plugins" Condition="Exists('$(TargetDir)/cloak_palette.json')" />
       <_CloakMaskShipped Include="$(MSBuildProjectDirectory)\CloakMasks\**\*.*" Condition="Exists('$(MSBuildProjectDirectory)\CloakMasks')" />
     </ItemGroup>
     <PropertyGroup>
@@ -118,7 +119,7 @@
           DestinationFolder="$(ThunderstoreDir)/temp/%(Binaries.PackDir)"
           Condition="'$(CanPackThunderstore)' == 'true'" />
     <Copy SourceFiles="@(_CloakMaskShipped)"
-          DestinationFiles="$(ThunderstoreDir)/temp/CloakMasks/%(RecursiveDir)%(Filename)%(Extension)"
+          DestinationFiles="$(ThunderstoreDir)/temp/BepInEx/plugins/CloakMasks/%(RecursiveDir)%(Filename)%(Extension)"
           SkipUnchangedFiles="true"
           Condition="'$(CanPackThunderstore)' == 'true' And '@(_CloakMaskShipped)' != ''" />
     <Exec Command="dotnet tool restore"
