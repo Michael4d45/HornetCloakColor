@@ -19,7 +19,7 @@ namespace HornetCloakColor
         /// Keep this in sync with &lt;Version&gt; in HornetCloakColor.csproj. The BepInAutoPlugin
         /// attribute requires a compile-time constant, so we can't read from the csproj directly.
         /// </summary>
-        public const string ModVersion = "1.11.2";
+        public const string ModVersion = "1.12.0";
 
         internal static HornetCloakColorPlugin? Instance { get; private set; }
         internal static ManualLogSource? LogSource { get; private set; }
@@ -48,6 +48,8 @@ namespace HornetCloakColor
             // Without this, transient sprites can spawn-and-despawn between backstop rescans
             // and never get tinted — the visible "sometimes she's tinted, sometimes not" bug.
             CloakSpawnHookHarmonyPatcher.Apply();
+            CloakTk2dHarmonyPatcher.Apply();
+            CloakHeroDamageHarmonyPatcher.Apply();
 
             // SSMP may load after this plugin; username tint needs its types + satellite registration.
             UsernameColorHarmonyPatcher.Apply();

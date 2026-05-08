@@ -151,6 +151,40 @@ namespace HornetCloakColor.Client
         }
 
         /// <summary>
+        /// Harmony postfix after tk2d updates materials — refreshes orphan sprites that already
+        /// passed eligibility or tries enrollment once <see cref="MeshRenderer.sharedMaterial"/> is valid.
+        /// </summary>
+        internal static void OnTk2dPipelineComplete(tk2dSprite sprite)
+        {
+            if (Instance == null || sprite == null)
+                return;
+
+            // Hero hierarchy uses <see cref="CloakRecolor"/> exclusively (handled first in Harmony postfix).
+            if (sprite.GetComponentInParent<CloakRecolor>() != null)
+                return;
+
+            var renderer = sprite.GetComponent<MeshRenderer>();
+            if (renderer == null)
+                return;
+
+            CloakMaterialApplier.InvalidateRenderer(renderer);
+
+            if (Instance._eligibleSet.Contains(renderer))
+            {
+                Instance._eligibleSprite[renderer] = sprite;
+                CloakMaterialApplier.Apply(
+                    renderer,
+                    sprite,
+                    Instance._color,
+                    useCloakShader: true,
+                    Instance._originalShaderByRenderer);
+                return;
+            }
+
+            Instance.TryEnrollEligible(sprite, source: "Tk2dPipeline");
+        }
+
+        /// <summary>
         /// Eligibility check shared by the spawn hook and the periodic scan. Returns the matched
         /// mask (via <see cref="CloakMaskManager"/>'s caches) when the sprite qualifies, or
         /// <c>false</c> otherwise. Cheap on warm caches: a previously-seen atlas resolves in O(1)

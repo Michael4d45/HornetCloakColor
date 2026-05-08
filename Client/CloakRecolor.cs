@@ -32,7 +32,49 @@ namespace HornetCloakColor.Client
         private int _meshRescanCountdown;
         private bool _meshCacheInvalid = true;
 
+        /// <summary>
+        /// Called from <see cref="CloakTk2dHarmonyPatcher"/> immediately after tk2d finishes updating
+        /// this sprite (LateUpdate / Start / OnEnable).
+        /// </summary>
+        internal void ApplyFromTk2dPipeline(tk2dSprite sprite)
+        {
+            var meshRenderer = sprite.GetComponent<MeshRenderer>();
+            if (meshRenderer == null)
+                return;
+
+            CloakMaterialApplier.InvalidateRenderer(meshRenderer);
+            CloakMaterialApplier.Apply(
+                meshRenderer,
+                sprite,
+                Color,
+                UseCloakShader,
+                _originalShaderByRenderer);
+        }
+
+        /// <summary>
+        /// Call after tk2d rebuilds child sprites/materials (spike damage, hurt states, etc.) so we
+        /// rediscover <see cref="MeshRenderer"/>s and re-run mask resolution instead of waiting for
+        /// the periodic mesh rescan interval.
+        /// </summary>
+        internal static void NotifyHeroPossibleSpriteRebuild(HeroController? hero)
+        {
+            if (hero == null) return;
+            var recolor = hero.GetComponent<CloakRecolor>();
+            recolor?.ForceHierarchyRefresh();
+        }
+
         private void OnEnable() => _meshCacheInvalid = true;
+
+        /// <summary>
+        /// Full mesh cache rebuild + invalidate per-renderer memoization + immediate apply.
+        /// </summary>
+        internal void ForceHierarchyRefresh()
+        {
+            _meshCacheInvalid = true;
+            RebuildMeshCache();
+            CloakMaterialApplier.InvalidateSubtree(transform);
+            ApplyToCachedMeshRenderersCore();
+        }
 
         private void LateUpdate()
         {

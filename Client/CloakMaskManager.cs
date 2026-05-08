@@ -19,17 +19,38 @@ namespace HornetCloakColor.Client
         private static readonly HashSet<string> MissingMaskFilePaths = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
-        /// Hot-path cache keyed by the atlas <see cref="Texture.GetInstanceID()"/>.
-        /// <c>null</c> entry means "we already determined this atlas has no mask on disk".
-        /// Lets the spawn hook + scanner skip string-building for any texture we've seen before.
+        /// Hot-path cache keyed by <c>(texture instance id, collection folder stem)</c>.
+        /// Mask files live under a collection-specific folder; caching only by texture id caused
+        /// the first frames to resolve <see cref="CloakDiskNames.NoCollectionFolder"/> before
+        /// <c>tk2dSprite.Collection</c> was bound, poisoning lookups when the real folder later
+        /// contained the PNG.
+        /// <para><c>null</c> means we resolved that there is no mask for that path.</para>
         /// </summary>
-        private static readonly Dictionary<int, Texture2D?> ByTextureInstanceId = new();
+        private static readonly Dictionary<string, Texture2D?> ByTextureCollectionKey = new(StringComparer.Ordinal);
         private static readonly Dictionary<string, Texture2D?> ByTexture2DMaskName = new(StringComparer.OrdinalIgnoreCase);
 
         private static string? _pluginDir;
         private static Texture2D? _blackWeight1x1;
         private static readonly HashSet<string> DumpedOriginalPaths = new(StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<string> DumpedTemplatePaths = new(StringComparer.OrdinalIgnoreCase);
+
+        private static string TextureCollectionCacheKey(int textureInstanceId, string collectionStem) =>
+            string.Concat(textureInstanceId.ToString(), "\x1f", collectionStem);
+
+        /// <summary>
+        /// True when we have cached a definitive "no mask file" result for this atlas binding.
+        /// Used to avoid re-running full <see cref="CloakMaterialApplier.Apply"/> every frame on
+        /// unrelated tk2d meshes while still retrying when the cache was never populated.
+        /// </summary>
+        internal static bool IsMaskConfirmedAbsentForBinding(Texture mainTex, string? tk2dCollectionName)
+        {
+            if (mainTex == null || mainTex.width <= 0)
+                return false;
+
+            var collectionStem = CloakDiskNames.CollectionFolder(tk2dCollectionName);
+            var key = TextureCollectionCacheKey(mainTex.GetInstanceID(), collectionStem);
+            return ByTextureCollectionKey.TryGetValue(key, out var v) && v == null;
+        }
 
         /// <summary>R=0 mask so the tint shader leaves pixels unchanged when no real mask exists.</summary>
         public static Texture2D BlackWeightMask
@@ -56,7 +77,7 @@ namespace HornetCloakColor.Client
 
             ByMaskFilePath.Clear();
             MissingMaskFilePaths.Clear();
-            ByTextureInstanceId.Clear();
+            ByTextureCollectionKey.Clear();
             ByTexture2DMaskName.Clear();
             DumpedOriginalPaths.Clear();
             DumpedTemplatePaths.Clear();
@@ -164,18 +185,18 @@ namespace HornetCloakColor.Client
             if (mainTex.width <= 0 || mainTex.height <= 0)
                 return false;
 
-            // Hot-path: any atlas we've previously resolved (or proven absent) lookups in O(1)
-            // by instance ID, with zero string allocation. Only cold lookups fall through to the
-            // path-building branch below.
+            var collectionStem = CloakDiskNames.CollectionFolder(tk2dCollectionName);
             var texId = mainTex.GetInstanceID();
-            if (ByTextureInstanceId.TryGetValue(texId, out var cachedById))
+            var compositeKey = TextureCollectionCacheKey(texId, collectionStem);
+
+            // Hot-path: resolved mask or proven absence for this texture + collection layout.
+            if (ByTextureCollectionKey.TryGetValue(compositeKey, out var cachedById))
             {
                 if (cachedById == null) return false;
                 mask = cachedById;
                 return true;
             }
 
-            var collectionStem = CloakDiskNames.CollectionFolder(tk2dCollectionName);
             var texStem = CloakDiskNames.SanitizeFileStem(
                 string.IsNullOrEmpty(mainTex.name) ? $"tex_{mainTex.GetInstanceID()}" : mainTex.name);
 
@@ -186,14 +207,14 @@ namespace HornetCloakColor.Client
 
             if (ByMaskFilePath.TryGetValue(preferredPath, out var cached) && cached != null)
             {
-                ByTextureInstanceId[texId] = cached;
+                ByTextureCollectionKey[compositeKey] = cached;
                 mask = cached;
                 return true;
             }
 
             if (MissingMaskFilePaths.Contains(preferredPath))
             {
-                ByTextureInstanceId[texId] = null;
+                ByTextureCollectionKey[compositeKey] = null;
                 return false;
             }
 
@@ -222,7 +243,7 @@ namespace HornetCloakColor.Client
             {
                 MaybeDumpDiscoveredTextureFiles(mainTex, preferredPath, createEmptyMask: true);
                 MissingMaskFilePaths.Add(preferredPath);
-                ByTextureInstanceId[texId] = null;
+                ByTextureCollectionKey[compositeKey] = null;
                 return false;
             }
 
@@ -230,7 +251,7 @@ namespace HornetCloakColor.Client
             maskTex.filterMode = FilterMode.Bilinear;
             maskTex.name = $"CloakMask:{collectionStem}/{texStem}";
             ByMaskFilePath[preferredPath] = maskTex;
-            ByTextureInstanceId[texId] = maskTex;
+            ByTextureCollectionKey[compositeKey] = maskTex;
 
             var maskPathForDump = resolvedPath ?? preferredPath;
             MaybeDumpDiscoveredTextureFiles(mainTex, maskPathForDump, createEmptyMask: false);

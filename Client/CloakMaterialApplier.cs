@@ -57,6 +57,29 @@ namespace HornetCloakColor.Client
         /// </summary>
         public static void InvalidateAll() => AppliedByRenderer.Clear();
 
+        /// <summary>
+        /// Drop memoization for one renderer (e.g. after tk2d rebuilds materials mid-animation).
+        /// </summary>
+        public static void InvalidateRenderer(MeshRenderer? renderer)
+        {
+            if (renderer == null) return;
+            AppliedByRenderer.Remove(renderer.GetInstanceID());
+        }
+
+        /// <summary>
+        /// Clears memoized apply state for every <see cref="MeshRenderer"/> under <paramref name="root"/>
+        /// so the next apply pass rebinds shaders/masks after tk2d rebuilds hierarchy or materials.
+        /// </summary>
+        public static void InvalidateSubtree(Transform? root)
+        {
+            if (root == null) return;
+            foreach (var mr in root.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                if (mr != null)
+                    InvalidateRenderer(mr);
+            }
+        }
+
         public static void Apply(
             MeshRenderer renderer,
             tk2dSprite? sprite,
@@ -79,15 +102,22 @@ namespace HornetCloakColor.Client
             var hasCloakShader = useCloakShader && CloakShaderManager.Shader != null;
 
             // Fast path: same Material instance + same intent + same color → nothing changed.
-            // Mask binding can only change after InvalidateAll() (palette reload / scene change),
-            // so it's implicitly covered by the SharedMatInstanceId equality.
+            // Do not permanently skip for NoMaskRestored until the mask lookup cache records a
+            // definitive absence for this texture + collection key (see CloakMaskManager composite cache).
             if (AppliedByRenderer.TryGetValue(rendererId, out var prev)
                 && prev.SharedMatInstanceId == sharedMatId)
             {
                 if (hasCloakShader)
                 {
                     if (prev.Mode == AppliedMode.CloakApplied && prev.Color.Equals(color)) return;
-                    if (prev.Mode == AppliedMode.NoMaskRestored) return; // confirmed no mask; keep restored
+                    if (prev.Mode == AppliedMode.NoMaskRestored)
+                    {
+                        var texEarly = sharedCheck.mainTexture;
+                        var sprEarly = sprite ?? renderer.GetComponent<tk2dSprite>();
+                        var collName = sprEarly?.Collection != null ? sprEarly.Collection.name : null;
+                        if (texEarly != null && CloakMaskManager.IsMaskConfirmedAbsentForBinding(texEarly, collName))
+                            return;
+                    }
                 }
                 else if (prev.Mode == AppliedMode.VertexTinted && prev.Color.Equals(color))
                 {
@@ -99,6 +129,14 @@ namespace HornetCloakColor.Client
             // so this is cheap once the renderer has been touched.
             var mat = renderer.material;
             if (mat == null) return;
+
+            // tk2d often assigns atlas/mainTexture after Awake / across frames; never cache
+            // "no mask" while the material still has no texture binding.
+            if (hasCloakShader && mat.mainTexture == null)
+            {
+                AppliedByRenderer.Remove(rendererId);
+                return;
+            }
 
             sprite ??= renderer.GetComponent<tk2dSprite>();
 
