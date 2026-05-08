@@ -20,7 +20,7 @@
     <PathMap Condition="'$(Configuration)' == 'Release'">$(MSBuildProjectDirectory)=/</PathMap>
 
     <AssemblyTitle>HornetCloakColor</AssemblyTitle>
-    <Version>1.13.1</Version>
+    <Version>1.14.0</Version>
 
     <BepInExPluginGuid>hornet.cloak.color</BepInExPluginGuid>
     <BepInExPluginName>HornetCloakColor</BepInExPluginName>
@@ -45,6 +45,7 @@
     <PackageReference Include="HarmonyX" Version="2.9.0" />
     <PackageReference Include="Hamunii.BepInEx.AutoPlugin" Version="2.0.1" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Unity.Analyzers" Version="1.25.0" PrivateAssets="all" />
+    <PackageReference Include="Silksong.ModMenu" Version="0.7.4" />
     <PackageReference Include="UnityEngine.Modules" Version="6000.0.50" IncludeAssets="compile" />
     <PackageReference Include="Silksong.GameLibs" Version="*-*" PrivateAssets="all" />
   </ItemGroup>
@@ -80,14 +81,11 @@
     </EmbeddedResource>
   </ItemGroup>
   <Target Name="WarnIfShaderBundleMissing" BeforeTargets="CoreCompile" Condition="!Exists('Resources/cloakshader.bundle')">
-    <Message Importance="High"
-             Text="Cloak shader bundle missing at Resources/cloakshader.bundle. Cloak-only mode will fall back to whole-character tint at runtime. See Shaders/README.md to bake one." />
+    <Message Importance="High" Text="Cloak shader bundle missing at Resources/cloakshader.bundle. Cloak-only mode will fall back to whole-character tint at runtime. See Shaders/README.md to bake one." />
   </Target>
 
   <Target Name="BuildSSMPSatellite" BeforeTargets="CopyAndPackageMod">
-    <MSBuild Projects="$(MSBuildThisFileDirectory)HornetCloakColor.SSMP\HornetCloakColor.SSMP.csproj"
-             Properties="Configuration=$(Configuration);Platform=$(Platform)"
-             Targets="Build" />
+    <MSBuild Projects="$(MSBuildThisFileDirectory)HornetCloakColor.SSMP\HornetCloakColor.SSMP.csproj" Properties="Configuration=$(Configuration);Platform=$(Platform)" Targets="Build" />
   </Target>
 
   <Target Name="CopyAndPackageMod" AfterTargets="PostBuildEvent">
@@ -105,13 +103,8 @@
     </PropertyGroup>
 
     <!-- Local install (if Silksong path is configured) -->
-    <Copy SourceFiles="@(Binaries)"
-          DestinationFolder="$(SilksongPluginsFolder)/$(AssemblyTitle)/%(Binaries.LocalDir)"
-          Condition="'$(SilksongPluginsFolder)' != '' And Exists('$(SilksongPluginsFolder)')" />
-    <Copy SourceFiles="@(_CloakMaskShipped)"
-          DestinationFiles="$(SilksongPluginsFolder)/$(AssemblyTitle)/CloakMasks/%(RecursiveDir)%(Filename)%(Extension)"
-          SkipUnchangedFiles="true"
-          Condition="'$(SilksongPluginsFolder)' != '' And Exists('$(SilksongPluginsFolder)') And '@(_CloakMaskShipped)' != ''" />
+    <Copy SourceFiles="@(Binaries)" DestinationFolder="$(SilksongPluginsFolder)/$(AssemblyTitle)/%(Binaries.LocalDir)" Condition="'$(SilksongPluginsFolder)' != '' And Exists('$(SilksongPluginsFolder)')" />
+    <Copy SourceFiles="@(_CloakMaskShipped)" DestinationFiles="$(SilksongPluginsFolder)/$(AssemblyTitle)/CloakMasks/%(RecursiveDir)%(Filename)%(Extension)" SkipUnchangedFiles="true" Condition="'$(SilksongPluginsFolder)' != '' And Exists('$(SilksongPluginsFolder)') And '@(_CloakMaskShipped)' != ''" />
 
     <!-- Thunderstore packaging (only runs when both the toml and the package icon exist) -->
     <PropertyGroup>
@@ -119,21 +112,10 @@
     </PropertyGroup>
     <RemoveDir Directories="$(ThunderstoreDir)/temp;$(ThunderstoreDir)/dist" Condition="'$(CanPackThunderstore)' == 'true'" />
     <MakeDir Directories="$(ThunderstoreDir)/temp" Condition="'$(CanPackThunderstore)' == 'true'" />
-    <Copy SourceFiles="@(Binaries)"
-          DestinationFolder="$(ThunderstoreDir)/temp/%(Binaries.PackDir)"
-          Condition="'$(CanPackThunderstore)' == 'true'" />
-    <Copy SourceFiles="@(_CloakMaskShipped)"
-          DestinationFiles="$(ThunderstoreDir)/temp/BepInEx/plugins/CloakMasks/%(RecursiveDir)%(Filename)%(Extension)"
-          SkipUnchangedFiles="true"
-          Condition="'$(CanPackThunderstore)' == 'true' And '@(_CloakMaskShipped)' != ''" />
-    <Exec Command="dotnet tool restore"
-          Condition="'$(CanPackThunderstore)' == 'true'" />
-    <Exec Command="dotnet tcli build --config-path &quot;$(ThunderstoreDir)/thunderstore.toml&quot; --package-name &quot;$(AssemblyTitle)&quot; --package-version $(Version)"
-          StandardOutputImportance="High"
-          StandardErrorImportance="High"
-          Condition="'$(CanPackThunderstore)' == 'true'" />
-    <Message Importance="High"
-             Text="Skipping Thunderstore packaging: drop a 256x256 icon at $(ThunderstoreDir)/icon.png to enable it."
-             Condition="'$(CanPackThunderstore)' != 'true'" />
+    <Copy SourceFiles="@(Binaries)" DestinationFolder="$(ThunderstoreDir)/temp/%(Binaries.PackDir)" Condition="'$(CanPackThunderstore)' == 'true'" />
+    <Copy SourceFiles="@(_CloakMaskShipped)" DestinationFiles="$(ThunderstoreDir)/temp/BepInEx/plugins/CloakMasks/%(RecursiveDir)%(Filename)%(Extension)" SkipUnchangedFiles="true" Condition="'$(CanPackThunderstore)' == 'true' And '@(_CloakMaskShipped)' != ''" />
+    <Exec Command="dotnet tool restore" Condition="'$(CanPackThunderstore)' == 'true'" />
+    <Exec Command="dotnet tcli build --config-path &quot;$(ThunderstoreDir)/thunderstore.toml&quot; --package-name &quot;$(AssemblyTitle)&quot; --package-version $(Version)" StandardOutputImportance="High" StandardErrorImportance="High" Condition="'$(CanPackThunderstore)' == 'true'" />
+    <Message Importance="High" Text="Skipping Thunderstore packaging: drop a 256x256 icon at $(ThunderstoreDir)/icon.png to enable it." Condition="'$(CanPackThunderstore)' != 'true'" />
   </Target>
 </Project>

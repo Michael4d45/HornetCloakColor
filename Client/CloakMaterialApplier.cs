@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using HornetCloakColor.Shared;
 using UnityEngine;
+using HornetCloakColor;
 
 namespace HornetCloakColor.Client
 {
@@ -33,12 +34,15 @@ namespace HornetCloakColor.Client
             public readonly int SharedMatInstanceId;
             public readonly CloakColor Color;
             public readonly AppliedMode Mode;
+            /// <summary>Last <see cref="GetTextureSaturationBoost"/> when <see cref="AppliedMode.CloakApplied"/>.</summary>
+            public readonly float TextureSaturationBoost;
 
-            public AppliedState(int sharedMatInstanceId, CloakColor color, AppliedMode mode)
+            public AppliedState(int sharedMatInstanceId, CloakColor color, AppliedMode mode, float textureSaturationBoost = 0f)
             {
                 SharedMatInstanceId = sharedMatInstanceId;
                 Color = color;
                 Mode = mode;
+                TextureSaturationBoost = textureSaturationBoost;
             }
         }
 
@@ -141,7 +145,10 @@ namespace HornetCloakColor.Client
             {
                 if (hasCloakShader)
                 {
-                    if (prev.Mode == AppliedMode.CloakApplied && prev.Color.Equals(color)) return;
+                    if (prev.Mode == AppliedMode.CloakApplied
+                        && prev.Color.Equals(color)
+                        && Mathf.Approximately(prev.TextureSaturationBoost, GetTextureSaturationBoost()))
+                        return;
                     if (prev.Mode == AppliedMode.NoMaskRestored)
                     {
                         var texEarly = sharedCheck.mainTexture;
@@ -208,7 +215,10 @@ namespace HornetCloakColor.Client
             // swaps a different material onto the renderer.
             var finalSharedMat = renderer.sharedMaterial;
             if (finalSharedMat != null)
-                AppliedByRenderer[rendererId] = new AppliedState(finalSharedMat.GetInstanceID(), finalColor, finalMode);
+            {
+                var boost = finalMode == AppliedMode.CloakApplied ? GetTextureSaturationBoost() : 0f;
+                AppliedByRenderer[rendererId] = new AppliedState(finalSharedMat.GetInstanceID(), finalColor, finalMode, boost);
+            }
         }
 
         public static void Restore(MeshRenderer renderer, Dictionary<MeshRenderer, Shader> originalShaderByRenderer)
@@ -235,7 +245,7 @@ namespace HornetCloakColor.Client
 
             var finalSharedMat = renderer.sharedMaterial;
             if (finalSharedMat != null)
-                AppliedByRenderer[rendererId] = new AppliedState(finalSharedMat.GetInstanceID(), default, AppliedMode.NoMaskRestored);
+                AppliedByRenderer[rendererId] = new AppliedState(finalSharedMat.GetInstanceID(), default, AppliedMode.NoMaskRestored, 0f);
         }
 
         private static void EnsureCloakShader(
@@ -285,10 +295,19 @@ namespace HornetCloakColor.Client
 
             color.ToHSV(out var h, out var s, out var v);
             mat.SetFloat(CloakShaderManager.TargetHueId, h);
-            mat.SetFloat(CloakShaderManager.TargetSatId, s <= 0.001f ? 0f : 1.0f);
+            var satBoost = GetTextureSaturationBoost();
+            mat.SetFloat(CloakShaderManager.TargetSatId, s <= 0.001f ? 0f : satBoost);
             mat.SetFloat(CloakShaderManager.TargetValId, Mathf.Lerp(0.6f, 1.4f, v));
             mat.SetFloat(CloakShaderManager.StrengthId, 1f);
             mat.SetTexture(CloakShaderManager.CloakMaskTexId, mask);
+        }
+
+        /// <summary>Clamped <see cref="CloakColorConfig.TextureSaturationBoost"/>; 1 when plugin/config is unavailable.</summary>
+        internal static float GetTextureSaturationBoost()
+        {
+            var inst = HornetCloakColorPlugin.Instance;
+            if (inst?.ColorConfig == null) return 1f;
+            return Mathf.Clamp(inst.ColorConfig.TextureSaturationBoost.Value, 0f, 2f);
         }
 
         private static void ApplyVertexTint(Material mat, tk2dBaseSprite? sprite, CloakColor color)

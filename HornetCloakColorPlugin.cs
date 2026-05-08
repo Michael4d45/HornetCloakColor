@@ -1,5 +1,6 @@
 using System.Collections;
 using BepInEx;
+using Silksong.ModMenu;
 using UnityEngine;
 using BepInEx.Logging;
 using HornetCloakColor.Client;
@@ -13,6 +14,7 @@ namespace HornetCloakColor
     /// SSMP is a <b>soft</b> dependency — without it the mod still recolors your own cloak.
     /// </summary>
     [BepInAutoPlugin(id: "hornet.cloak.color", version: ModVersion)]
+    [BepInDependency(ModMenuPlugin.Id)]
     [BepInDependency(SSMPBridge.SSMPGuid, BepInDependency.DependencyFlags.SoftDependency)]
     public partial class HornetCloakColorPlugin : BaseUnityPlugin
     {
@@ -20,7 +22,7 @@ namespace HornetCloakColor
         /// Keep this in sync with &lt;Version&gt; in HornetCloakColor.csproj. The BepInAutoPlugin
         /// attribute requires a compile-time constant, so we can't read from the csproj directly.
         /// </summary>
-        public const string ModVersion = "1.13.1";
+        public const string ModVersion = "1.14.0";
 
         internal static HornetCloakColorPlugin? Instance { get; private set; }
         internal static ManualLogSource? LogSource { get; private set; }

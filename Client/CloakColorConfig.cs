@@ -2,6 +2,7 @@ using System;
 using BepInEx.Configuration;
 using HornetCloakColor.Interop;
 using HornetCloakColor.Shared;
+using Silksong.ModMenu.Plugin;
 
 namespace HornetCloakColor.Client
 {
@@ -35,6 +36,8 @@ namespace HornetCloakColor.Client
 
         public ConfigEntry<Preset> PresetChoice { get; }
         public ConfigEntry<string> CustomHex { get; }
+        /// <summary>Shader <c>_TargetSat</c> for non-grey cloak colors; scales texel saturation before hue tint.</summary>
+        public ConfigEntry<float> TextureSaturationBoost { get; }
 
         /// <summary>Fires when the effective cloak color changes.</summary>
         public event Action<CloakColor>? ColorChanged;
@@ -53,8 +56,20 @@ namespace HornetCloakColor.Client
                 DefaultCustom.ToString(),
                 "Custom cloak color used when preset is set to 'Custom'. Accepts #RRGGBB, RRGGBB, or 'r,g,b' (0-255 each).");
 
+            TextureSaturationBoost = config.Bind(
+                "Appearance",
+                CloakTextureSaturationModMenuElement.ConfigKey,
+                1f,
+                new ConfigDescription(
+                    "Multiplies each masked pixel's saturation after the hue shift (1 = unchanged). " +
+                    "Values above 1 punch up washed-out cloak art. This is not the same as your hex's HSV saturation " +
+                    "(e.g. #00FF00 is already fully saturated as a color pick).",
+                    new AcceptableValueRange<float>(0f, 2f),
+                    (ConfigEntryFactory.MenuElementGenerator)CloakTextureSaturationModMenuElement.TryCreateElement));
+
             PresetChoice.SettingChanged += (_, _) => ColorChanged?.Invoke(EffectiveColor);
             CustomHex.SettingChanged += (_, _) => ColorChanged?.Invoke(EffectiveColor);
+            TextureSaturationBoost.SettingChanged += (_, _) => ColorChanged?.Invoke(EffectiveColor);
         }
 
         /// <summary>

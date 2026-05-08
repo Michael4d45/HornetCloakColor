@@ -22,6 +22,7 @@ namespace HornetCloakColor.Client
         private int _lastSpriteId;
         private int _lastMaterialId;
         private CloakColor _lastColor;
+        private float _lastTextureSatBoost = float.NaN;
         private bool _applied;
 
         internal static void SetColor(CloakColor color)
@@ -136,7 +137,12 @@ namespace HornetCloakColor.Client
 
             var spriteId = sprite.GetInstanceID();
             var materialId = shared.GetInstanceID();
-            if (!force && _lastSpriteId == spriteId && _lastMaterialId == materialId && _lastColor.Equals(_color))
+            var satBoost = CloakMaterialApplier.GetTextureSaturationBoost();
+            if (!force
+                && _lastSpriteId == spriteId
+                && _lastMaterialId == materialId
+                && _lastColor.Equals(_color)
+                && Mathf.Approximately(_lastTextureSatBoost, satBoost))
                 return;
 
             if (!CloakMaskManager.TryGetTexture2DMask(sprite.texture, sprite.name, out var mask))
@@ -167,6 +173,7 @@ namespace HornetCloakColor.Client
             _lastSpriteId = spriteId;
             _lastMaterialId = finalShared != null ? finalShared.GetInstanceID() : materialId;
             _lastColor = _color;
+            _lastTextureSatBoost = satBoost;
             _applied = true;
         }
 
@@ -192,7 +199,7 @@ namespace HornetCloakColor.Client
 
             color.ToHSV(out var h, out var s, out var v);
             mat.SetFloat(CloakShaderManager.TargetHueId, h);
-            mat.SetFloat(CloakShaderManager.TargetSatId, s <= 0.001f ? 0f : 1.0f);
+            mat.SetFloat(CloakShaderManager.TargetSatId, s <= 0.001f ? 0f : CloakMaterialApplier.GetTextureSaturationBoost());
             mat.SetFloat(CloakShaderManager.TargetValId, Mathf.Lerp(0.6f, 1.4f, v));
             mat.SetFloat(CloakShaderManager.StrengthId, 1f);
             mat.SetTexture(CloakShaderManager.CloakMaskTexId, mask);
