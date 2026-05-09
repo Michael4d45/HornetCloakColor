@@ -22,6 +22,15 @@
     <AssemblyTitle>HornetCloakColor</AssemblyTitle>
     <Version>1.14.1</Version>
 
+    <!-- Must match thunderstore/thunderstore.toml [package].namespace (used for local install folder = r2modman-style Author-Package). -->
+    <ThunderstoreNamespace>Michael4d45</ThunderstoreNamespace>
+    <ThunderstorePluginInstallFolder>$(ThunderstoreNamespace)-$(AssemblyTitle)</ThunderstorePluginInstallFolder>
+    <ThunderstoreWebsiteUrl>https://github.com/Michael4d45/HornetCloakColor</ThunderstoreWebsiteUrl>
+    <!-- Bump these together with [package.dependencies] in thunderstore.toml. -->
+    <ThunderstoreBepInExPackVersion>5.4.2304</ThunderstoreBepInExPackVersion>
+    <ThunderstoreModMenuVersion>0.7.4</ThunderstoreModMenuVersion>
+    <ThunderstoreManifestDescription>Change the color of Hornet's cloak. Fully synchronized with other SSMP players.</ThunderstoreManifestDescription>
+
     <BepInExPluginGuid>hornet.cloak.color</BepInExPluginGuid>
     <BepInExPluginName>HornetCloakColor</BepInExPluginName>
 
@@ -45,7 +54,7 @@
     <PackageReference Include="HarmonyX" Version="2.9.0" />
     <PackageReference Include="Hamunii.BepInEx.AutoPlugin" Version="2.0.1" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Unity.Analyzers" Version="1.25.0" PrivateAssets="all" />
-    <PackageReference Include="Silksong.ModMenu" Version="0.7.4" />
+    <PackageReference Include="Silksong.ModMenu" Version="$(ThunderstoreModMenuVersion)" />
     <PackageReference Include="UnityEngine.Modules" Version="6000.0.50" IncludeAssets="compile" />
     <PackageReference Include="Silksong.GameLibs" Version="*-*" PrivateAssets="all" />
   </ItemGroup>
@@ -69,9 +78,9 @@
   </ItemGroup>
 
   <!--
-  Embed the cloak-tint shader bundle into the DLL so end users only have to copy
-  HornetCloakColor.dll into BepInEx/plugins. The bundle is built from a Unity
-  project (see Shaders/README.md) and is gitignored to avoid committing binaries.
+  Embed the cloak-tint shader bundle into the DLL so the game only needs the shipped
+  plugin folder (r2modman installs under BepInEx/plugins/Author-PackageName/).
+  The bundle is built from a Unity project (see Shaders/README.md) and is gitignored.
   If the file is missing the mod still works — it falls back to tinting the whole
   character via the tk2dSprite vertex color.
   -->
@@ -88,8 +97,16 @@
     <MSBuild Projects="$(MSBuildThisFileDirectory)HornetCloakColor.SSMP\HornetCloakColor.SSMP.csproj" Properties="Configuration=$(Configuration);Platform=$(Platform)" Targets="Build" />
   </Target>
 
+  <!-- Repo manifest.json: tooling / mirrors; tcli still reads thunderstore.toml for the published zip. Version and deps follow MSBuild properties above. -->
+  <Target Name="GenerateThunderstoreManifest" BeforeTargets="BeforeBuild">
+    <PropertyGroup>
+      <_ManifestLine>{&quot;name&quot;:&quot;$(AssemblyTitle)&quot;,&quot;version_number&quot;:&quot;$(Version)&quot;,&quot;website_url&quot;:&quot;$(ThunderstoreWebsiteUrl)&quot;,&quot;description&quot;:&quot;$(ThunderstoreManifestDescription)&quot;,&quot;dependencies&quot;:[&quot;BepInEx-BepInExPack_Silksong-$(ThunderstoreBepInExPackVersion)&quot;,&quot;silksong_modding-ModMenu-$(ThunderstoreModMenuVersion)&quot;]}</_ManifestLine>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(MSBuildThisFileDirectory)manifest.json" Lines="$(_ManifestLine)" Overwrite="true" WriteOnlyWhenDifferent="true" Encoding="UTF-8" />
+  </Target>
+
   <Target Name="CopyAndPackageMod" AfterTargets="PostBuildEvent">
-    <!-- Thunderstore temp dir mirrors BepInEx/plugins contents; thunderstore.toml maps ./temp → /BepInEx/plugins in the zip. -->
+    <!-- Stage thunderstore/temp; thunderstore.toml copies ./temp → /plugins in the package (r2modman maps under BepInEx/plugins/Author-Package/). -->
     <ItemGroup>
       <Binaries Include="$(TargetPath)" LocalDir="/" />
       <Binaries Include="$(TargetDir)/$(TargetName).pdb" LocalDir="/" />
@@ -102,9 +119,9 @@
       <ThunderstoreDir>$(ProjectDir)/thunderstore</ThunderstoreDir>
     </PropertyGroup>
 
-    <!-- Local install (if Silksong path is configured) -->
-    <Copy SourceFiles="@(Binaries)" DestinationFolder="$(SilksongPluginsFolder)/$(AssemblyTitle)/%(Binaries.LocalDir)" Condition="'$(SilksongPluginsFolder)' != '' And Exists('$(SilksongPluginsFolder)')" />
-    <Copy SourceFiles="@(_CloakMaskShipped)" DestinationFiles="$(SilksongPluginsFolder)/$(AssemblyTitle)/CloakMasks/%(RecursiveDir)%(Filename)%(Extension)" SkipUnchangedFiles="true" Condition="'$(SilksongPluginsFolder)' != '' And Exists('$(SilksongPluginsFolder)') And '@(_CloakMaskShipped)' != ''" />
+    <!-- Local install (if Silksong path is configured): same folder name r2modman uses under BepInEx/plugins. -->
+    <Copy SourceFiles="@(Binaries)" DestinationFolder="$(SilksongPluginsFolder)/$(ThunderstorePluginInstallFolder)/%(Binaries.LocalDir)" Condition="'$(SilksongPluginsFolder)' != '' And Exists('$(SilksongPluginsFolder)')" />
+    <Copy SourceFiles="@(_CloakMaskShipped)" DestinationFiles="$(SilksongPluginsFolder)/$(ThunderstorePluginInstallFolder)/CloakMasks/%(RecursiveDir)%(Filename)%(Extension)" SkipUnchangedFiles="true" Condition="'$(SilksongPluginsFolder)' != '' And Exists('$(SilksongPluginsFolder)') And '@(_CloakMaskShipped)' != ''" />
 
     <!-- Thunderstore: dotnet tcli build reads thunderstore.toml; [[build.copy]] target is the path inside the zip. -->
     <PropertyGroup>

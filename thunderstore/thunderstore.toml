@@ -2,6 +2,7 @@
 schemaVersion = "0.0.1"
 
 [package]
+# namespace must match $(ThunderstoreNamespace) in HornetCloakColor.csproj (local install path).
 namespace = "Michael4d45"
 # max 250 characters
 description = "Change the color of Hornet's cloak. Fully synchronized with other SSMP players."
@@ -10,6 +11,7 @@ websiteUrl = "https://github.com/Michael4d45/HornetCloakColor"
 containsNsfwContent = false
 
 # dependencies are specified in the format AuthorName-PackageName = "version".
+# Keep versions in sync with HornetCloakColor.csproj (ThunderstoreBepInExPackVersion, ThunderstoreModMenuVersion) and the generated manifest.json.
 # SSMP is intentionally NOT listed: it's an optional integration, install it separately
 # if you want multiplayer cloak sync. The mod runs fine in single-player without it.
 [package.dependencies]
