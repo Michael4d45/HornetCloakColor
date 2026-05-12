@@ -34,4 +34,4 @@ repository = "https://thunderstore.io"
 communities = [ "hollow-knight-silksong" ]
 
 [publish.categories]
-hollow-knight-silksong = [ "mods", "skins" ]
+hollow-knight-silksong = [ "mods", "cosmetic" ]
