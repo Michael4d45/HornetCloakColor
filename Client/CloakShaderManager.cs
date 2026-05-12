@@ -1,20 +1,31 @@
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using HornetCloakColor.Shared;
 using UnityEngine;
 
 namespace HornetCloakColor.Client
 {
     /// <summary>
-    /// Loads cloak shaders from the AssetBundle embedded in the mod DLL
-    /// (<c>HornetCloakColor.Resources.cloakshader.bundle</c>).
+    /// Loads cloak shaders from a platform-specific AssetBundle embedded in the mod DLL
+    /// (<c>windows/shaders.bundle</c>, <c>linux/shaders.bundle</c>, <c>macos/shaders.bundle</c>).
     /// </summary>
     internal static class CloakShaderManager
     {
         private const string ShaderName = "HornetCloakColor/CloakHueShift";
         private const string ShaderAssetName = "CloakHueShift";
 
-        private const string ResourceName = "HornetCloakColor.Resources.cloakshader.bundle";
+        /// <summary>Manifest resource name for the current OS bundle (matches csproj LogicalName).</summary>
+        private static string? ShaderBundleResourceNameForCurrentOs()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return "windows/shaders.bundle";
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                return "linux/shaders.bundle";
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+                return "macos/shaders.bundle";
+            return null;
+        }
 
         private static AssetBundle? _bundle;
         private static Shader? _shader;
@@ -46,21 +57,32 @@ namespace HornetCloakColor.Client
             _bundleInitialized = true;
 
             var asm = Assembly.GetExecutingAssembly();
-            using var stream = asm.GetManifestResourceStream(ResourceName);
-            if (stream == null)
+            var osBundle = ShaderBundleResourceNameForCurrentOs();
+            if (osBundle == null)
             {
-                Log.Warn($"Cloak shader bundle not embedded ({ResourceName}). " +
+                Log.Warn("Cloak shader bundle not loaded (unsupported OS — expected Windows, Linux, or macOS). " +
                          "Cloak-only recolor disabled; falling back to whole-character tint.");
                 return;
             }
 
-            using var ms = new MemoryStream();
-            stream.CopyTo(ms);
-            ms.Position = 0;
+            using var stream = asm.GetManifestResourceStream(osBundle);
+            if (stream == null)
+            {
+                Log.Warn($"Cloak shader bundle not embedded ({osBundle}). " +
+                         "Cloak-only recolor disabled; falling back to whole-character tint.");
+                return;
+            }
+
+            byte[] bundleBytes;
+            using (var ms = new MemoryStream())
+            {
+                stream.CopyTo(ms);
+                bundleBytes = ms.ToArray();
+            }
 
             try
             {
-                _bundle = AssetBundle.LoadFromMemory(ms.ToArray());
+                _bundle = AssetBundle.LoadFromMemory(bundleBytes);
             }
             catch (System.Exception ex)
             {

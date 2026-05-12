@@ -1,20 +1,17 @@
 # Resources
 
-The mod embeds `cloakshader.bundle` (built from `Shaders/CloakHueShift.shader`)
-into the DLL so end users only need to copy a single file.
+The mod embeds **per-OS** shader bundles built from `Shaders/CloakHueShift.shader`:
 
-This bundle is **gitignored** because it's a binary asset rebuilt from source.
-See `../Shaders/README.md` for instructions on baking it in Unity.
+- `windows/shaders.bundle`
+- `linux/shaders.bundle`
+- `macos/shaders.bundle`
 
-When this folder doesn't contain `cloakshader.bundle`, the mod still builds and
-runs — it simply falls back to tinting the entire character (the original
-behavior) instead of cloak-only recolor.
+They are **gitignored** (binary assets rebuilt from source). See `../Shaders/README.md`
+for Unity bake steps. At runtime the mod picks the bundle for the current OS.
 
-To activate the cloak-only path you'll need to bake the bundle once:
+If none of those files are present, the mod still builds and runs — it falls back to
+whole-character vertex tint.
 
-Install Unity 6000.0.50, create an empty 3D project.
-Drop Shaders/CloakHueShift.shader into Assets/Shaders/ and Shaders/Editor/BuildCloakShaderBundle.cs into Assets/Editor/.
-Menu: HornetCloakColor → Build Shader Bundle (Windows).
-Copy <unity-proj>/Build/cloakshader.bundle → HornetCloakColor/Resources/cloakshader.bundle.
-dotnet build -c Release again — it'll embed the bundle into the DLL.
-Without the bundle, the mod still runs (it just falls back to whole-character tint).
+Quick path: Unity 6000.0.50 project with the shader + editor script → menu
+**HornetCloakColor → Build Shader Bundle** for each platform → copy each output to the
+matching `Resources/<platform>/shaders.bundle` path → `dotnet build -c Release`.
