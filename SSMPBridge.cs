@@ -19,8 +19,10 @@ namespace HornetCloakColor
         public const string SSMPGuid = "ssmp";
 
         private static bool _registered;
-        private static Action<CloakColor>? _notifyColorChanged;
+        private static Action<CloakNetAppearance>? _notifyCloakAppearanceChanged;
         private static Action<CloakColor>? _notifyUsernameColorChanged;
+        private static Action? _clearLocalUsernameColorOnNetwork;
+        private static Action? _resendStoredLocalColorsToServer;
         private static Func<ushort, CloakColor>? _getRemoteMapColor;
 
         /// <summary>True when the SSMP plugin is loaded in BepInEx.</summary>
@@ -54,23 +56,47 @@ namespace HornetCloakColor
             }
         }
 
-        /// <summary>Send the local player's color to the server (no-op when SSMP isn't active).</summary>
-        public static void NotifyLocalColorChanged(CloakColor color)
+        /// <summary>Send the local player's cloak appearance (RGB + texture saturation) to the server (no-op when SSMP isn't active).</summary>
+        public static void NotifyLocalCloakAppearanceChanged(CloakNetAppearance appearance)
         {
             if (!_registered) return;
-            _notifyColorChanged?.Invoke(color);
+            _notifyCloakAppearanceChanged?.Invoke(appearance);
         }
 
-        /// <summary>Send the local player's username tint (or white to clear) when SSMP sync is active.</summary>
+        /// <summary>Send the local player's username tint when SSMP sync is active (any RGB, including white).</summary>
         public static void NotifyLocalUsernameColorChanged(CloakColor color)
         {
             if (!_registered) return;
             _notifyUsernameColorChanged?.Invoke(color);
         }
 
+        /// <summary>Tell the server to drop this client's username tint from the relay (Mod Menu Disabled).</summary>
+        public static void ClearLocalUsernameColorOnNetwork()
+        {
+            if (!_registered) return;
+            _clearLocalUsernameColorOnNetwork?.Invoke();
+        }
+
         /// <summary>Remote player's map icon color when SSMP sync is active; otherwise default white.</summary>
         public static CloakColor GetRemoteMapColorOrDefault(ushort playerId) =>
             _getRemoteMapColor?.Invoke(playerId) ?? CloakColor.Default;
+
+        /// <summary>Pushes the satellite's last cloak + username tint again (no-op if SSMP not registered).</summary>
+        public static void ResendStoredLocalColorsToServer()
+        {
+            if (!_registered) return;
+            _resendStoredLocalColorsToServer?.Invoke();
+        }
+
+        /// <summary>
+        /// SSMP may ignore the first addon payloads from a client until NetServer marks them registered.
+        /// Re-push a moment after connect so the host (and any client) reliably seeds the server relay.
+        /// </summary>
+        internal static void SchedulePostConnectColorResend()
+        {
+            if (!_registered) return;
+            HornetCloakColorPlugin.SchedulePostConnectColorResend();
+        }
 
         private static bool TryBindSatellite()
         {
@@ -101,9 +127,10 @@ namespace HornetCloakColor
             var register = entry.GetMethod("Register", BindingFlags.Public | BindingFlags.Static);
             register?.Invoke(null, null);
 
-            var notify = entry.GetMethod("NotifyLocalColorChanged", BindingFlags.Public | BindingFlags.Static);
+            var notify = entry.GetMethod("NotifyLocalCloakAppearanceChanged", BindingFlags.Public | BindingFlags.Static);
             if (notify != null)
-                _notifyColorChanged = (Action<CloakColor>)Delegate.CreateDelegate(typeof(Action<CloakColor>), notify);
+                _notifyCloakAppearanceChanged =
+                    (Action<CloakNetAppearance>)Delegate.CreateDelegate(typeof(Action<CloakNetAppearance>), notify);
 
             var getRemote = entry.GetMethod("GetRemoteMapColorOrDefault", BindingFlags.Public | BindingFlags.Static);
             if (getRemote != null)
@@ -113,6 +140,14 @@ namespace HornetCloakColor
             if (notifyUser != null)
                 _notifyUsernameColorChanged =
                     (Action<CloakColor>)Delegate.CreateDelegate(typeof(Action<CloakColor>), notifyUser);
+
+            var clearUser = entry.GetMethod("ClearLocalUsernameColorOnNetwork", BindingFlags.Public | BindingFlags.Static);
+            if (clearUser != null)
+                _clearLocalUsernameColorOnNetwork = (Action)Delegate.CreateDelegate(typeof(Action), clearUser);
+
+            var resend = entry.GetMethod("ResendStoredLocalColorsToServer", BindingFlags.Public | BindingFlags.Static);
+            if (resend != null)
+                _resendStoredLocalColorsToServer = (Action)Delegate.CreateDelegate(typeof(Action), resend);
 
             return true;
         }

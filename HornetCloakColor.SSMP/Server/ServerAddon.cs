@@ -6,21 +6,8 @@ using SSMP.Api.Server.Networking;
 namespace HornetCloakColor.Server
 {
     /// <summary>
-    /// SSMP server-side addon. Acts as a simple relay + memory store:
-    /// <list type="bullet">
-    ///   <item>Stores each connected player's cloak color.</item>
-    ///   <item>Broadcasts color updates to all other players.</item>
-    ///   <item>When a new player enters their first scene, replays every known color to them.</item>
-    /// </list>
-    ///
-    /// <para>Replay timing:</para>
-    /// We deliberately wait for <see cref="IServerManager.PlayerEnterSceneEvent"/> rather than
-    /// <see cref="IServerManager.PlayerConnectEvent"/>. The connect event fires the moment the
-    /// server has queued the SSMP <c>ServerInfo</c> packet for the new client — but the client
-    /// hasn't yet received/parsed it, so the addon ID table isn't populated. Any addon packet
-    /// we push in that window is silently dropped on the client with
-    /// <c>"Addon with ID X has no defined addon packet info"</c>. By the time PlayerEnterScene
-    /// fires the client has finished the addon handshake and is safe to send to.
+    /// SSMP server addon: authoritative cosmetics relay aligned with <c>SSMPEssentials.Server.Server</c>
+    /// (<see cref="IServerManager.PlayerConnectEvent"/> join snapshot + <c>PacketSender</c>-style broadcast).
     /// </summary>
     internal class ServerAddon : SSMP.Api.Server.ServerAddon
     {
@@ -29,29 +16,31 @@ namespace HornetCloakColor.Server
         public override uint ApiVersion => 1;
         public override bool NeedsNetwork => true;
 
-        private readonly Dictionary<ushort, CloakColor> _playerColors = new();
-        private readonly Dictionary<ushort, CloakColor> _playerUsernameColors = new();
-
-        /// <summary>Players we've already replayed the color list to, so we only do it once per connection.</summary>
-        private readonly HashSet<ushort> _seededPlayers = new();
-
+        private readonly PlayerCosmeticsTracker _tracker = new();
         private readonly bool _customUsernameColorsOverrideTeamColors =
             ServerUsernameRulesStore.LoadCustomUsernameColorsOverrideTeamColors();
 
+        /// <summary>
+        /// One idempotent replay on first <see cref="IServerManager.PlayerEnterSceneEvent"/> per connection
+        /// (covers rare client addon-handshake timing; duplicates are harmless on receivers).
+        /// </summary>
+        private readonly HashSet<ushort> _sceneCatchUpSent = new();
+
         private IServerApi? _api;
-        private IServerAddonNetworkSender<PacketId>? _sender;
 
         public override void Initialize(IServerApi serverApi)
         {
             _api = serverApi;
 
-            _sender = serverApi.NetServer.GetNetworkSender<PacketId>(this);
+            var sender = serverApi.NetServer.GetNetworkSender<PacketId>(this);
+            ServerCosmeticsPacketSender.Init(sender);
 
-            var receiver = serverApi.NetServer.GetNetworkReceiver<PacketId>(this, PacketFactory.Instantiate);
+            var receiver = serverApi.NetServer.GetNetworkReceiver<PacketId>(this, ServerAddonReceivePacketFactory.Instantiate);
             receiver.RegisterPacketHandler<CloakColorPacket>(PacketId.CloakColorUpdate, OnCloakColorUpdate);
             receiver.RegisterPacketHandler<UsernameColorPacket>(PacketId.UsernameColorUpdate, OnUsernameColorUpdate);
 
-            serverApi.ServerManager.PlayerEnterSceneEvent += OnPlayerEnterScene;
+            serverApi.ServerManager.PlayerConnectEvent += OnPlayerConnect;
+            serverApi.ServerManager.PlayerEnterSceneEvent += OnPlayerEnterSceneFirstCatchUp;
             serverApi.ServerManager.PlayerDisconnectEvent += OnPlayerDisconnect;
 
             Log.Info(
@@ -60,96 +49,54 @@ namespace HornetCloakColor.Server
                     : "Server addon initialized (team colors take precedence over custom username colors when teams are used).");
         }
 
-        private void OnPlayerEnterScene(IServerPlayer player)
+        /// <summary>Primary join path — same role as <c>SSMPEssentials.Server.Server.SendJoinInfo</c>.</summary>
+        private void OnPlayerConnect(IServerPlayer player) =>
+            PushJoinSnapshotTo(player, "PlayerConnect");
+
+        private void OnPlayerEnterSceneFirstCatchUp(IServerPlayer player)
         {
-            if (_sender == null) return;
+            if (!_sceneCatchUpSent.Add(player.Id))
+                return;
 
-            // Only replay once per connection — subsequent scene transitions don't need it.
-            if (!_seededPlayers.Add(player.Id)) return;
+            PushJoinSnapshotTo(player, "first scene catch-up");
+        }
 
-            _sender.SendSingleData(
-                PacketId.ServerUsernameColorRules,
-                new ServerUsernameColorRulesPacket
-                {
-                    CustomUsernameColorsOverrideTeamColors = _customUsernameColorsOverrideTeamColors,
-                },
-                player.Id);
+        private void PushJoinSnapshotTo(IServerPlayer player, string reason)
+        {
+            ServerCosmeticsPacketSender.SendUsernameRulesTo(player.Id, _customUsernameColorsOverrideTeamColors);
+            ServerCosmeticsPacketSender.SendAllOtherPlayersCloaksTo(player.Id, _tracker);
+            ServerCosmeticsPacketSender.SendAllOtherPlayersUsernameTintsTo(player.Id, _tracker);
 
-            var sentCloak = 0;
-            foreach (var kvp in _playerColors)
-            {
-                if (kvp.Key == player.Id) continue;
-
-                _sender.SendCollectionData(PacketId.CloakColorUpdate, new CloakColorPacket
-                {
-                    PlayerId = kvp.Key,
-                    Color = kvp.Value,
-                }, player.Id);
-                sentCloak++;
-            }
-
-            var sentUser = 0;
-            foreach (var kvp in _playerUsernameColors)
-            {
-                if (kvp.Key == player.Id) continue;
-
-                _sender.SendCollectionData(PacketId.UsernameColorUpdate, new UsernameColorPacket
-                {
-                    PlayerId = kvp.Key,
-                    Color = kvp.Value,
-                }, player.Id);
-                sentUser++;
-            }
-
-            Log.Info($"Seeded {sentCloak} cloak + {sentUser} username color(s) + rules to player {player.Id}.");
+            Log.Info($"Cosmetics snapshot ({reason}) → player {player.Id} (rules + others' cloak/username).");
         }
 
         private void OnPlayerDisconnect(IServerPlayer player)
         {
-            _playerColors.Remove(player.Id);
-            _playerUsernameColors.Remove(player.Id);
-            _seededPlayers.Remove(player.Id);
+            _tracker.RemovePlayer(player.Id);
+            _sceneCatchUpSent.Remove(player.Id);
         }
 
         private void OnCloakColorUpdate(ushort senderId, CloakColorPacket data)
         {
-            _playerColors[senderId] = data.Color;
+            var appearance = new CloakNetAppearance(data.Color, data.TextureSaturationCenti);
+            _tracker.SetCloak(senderId, appearance);
 
-            if (_api == null || _sender == null) return;
+            if (_api == null) return;
 
-            // Broadcast to every other player. We always stamp the real sender ID so clients
-            // can't spoof colors for other users.
-            foreach (var other in _api.ServerManager.Players)
-            {
-                if (other.Id == senderId) continue;
-
-                _sender.SendCollectionData(PacketId.CloakColorUpdate, new CloakColorPacket
-                {
-                    PlayerId = senderId,
-                    Color = data.Color,
-                }, other.Id);
-            }
+            ServerCosmeticsPacketSender.BroadcastCloakToOthers(senderId, appearance, _api.ServerManager.Players);
         }
 
         private void OnUsernameColorUpdate(ushort senderId, UsernameColorPacket data)
         {
-            if (data.Color == CloakColor.Default)
-                _playerUsernameColors.Remove(senderId);
-            else
-                _playerUsernameColors[senderId] = data.Color;
+            _tracker.SetUsernameTint(senderId, data.HasCustomUsernameTint, data.Color);
 
-            if (_api == null || _sender == null) return;
+            if (_api == null) return;
 
-            foreach (var other in _api.ServerManager.Players)
-            {
-                if (other.Id == senderId) continue;
-
-                _sender.SendCollectionData(PacketId.UsernameColorUpdate, new UsernameColorPacket
-                {
-                    PlayerId = senderId,
-                    Color = data.Color,
-                }, other.Id);
-            }
+            ServerCosmeticsPacketSender.BroadcastUsernameTintToOthers(
+                senderId,
+                data.Color,
+                data.HasCustomUsernameTint,
+                _api.ServerManager.Players);
         }
     }
 }

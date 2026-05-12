@@ -10,12 +10,16 @@ namespace HornetCloakColor.Client
     /// </summary>
     internal static class CloakColorApplier
     {
-        public static void Apply(GameObject? playerObject, CloakColor color)
+        /// <param name="textureSaturationBoostOverride">
+        /// When set (e.g. synced SSMP remote value), drives shader <c>_TargetSat</c> scaling instead of the local
+        /// config slider. Omit for the local hero / scene tint so <see cref="CloakColorConfig.TextureSaturationBoost"/> applies.
+        /// </param>
+        public static void Apply(GameObject? playerObject, CloakColor color, float? textureSaturationBoostOverride = null)
         {
             if (playerObject == null) return;
 
             var useCloakShader = CloakShaderManager.Shader != null;
-            CloakRecolor.AttachOrUpdate(playerObject, color, useCloakShader);
+            CloakRecolor.AttachOrUpdate(playerObject, color, useCloakShader, textureSaturationBoostOverride);
         }
 
         /// <summary>

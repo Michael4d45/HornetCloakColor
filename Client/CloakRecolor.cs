@@ -36,6 +36,12 @@ namespace HornetCloakColor.Client
         public CloakColor Color { get; private set; } = CloakColor.Default;
         public bool UseCloakShader { get; private set; } = true;
 
+        /// <summary>
+        /// When set, passed to <see cref="CloakMaterialApplier.Apply"/> instead of the local config slider
+        /// (SSMP remote players). Null = use <see cref="CloakMaterialApplier.GetTextureSaturationBoost"/> each frame.
+        /// </summary>
+        private float? _textureSaturationBoostOverride;
+
         /// <summary>Original sprite shader per renderer before we swapped in the cloak shader.</summary>
         private readonly Dictionary<MeshRenderer, Shader> _originalShaderByRenderer = new();
 
@@ -62,7 +68,8 @@ namespace HornetCloakColor.Client
                 sprite,
                 Color,
                 UseCloakShader,
-                _originalShaderByRenderer);
+                _originalShaderByRenderer,
+                _textureSaturationBoostOverride);
         }
 
         /// <summary>
@@ -193,10 +200,11 @@ namespace HornetCloakColor.Client
             ApplyToCachedMeshRenderersCore();
         }
 
-        public void Configure(CloakColor color, bool useCloakShader)
+        public void Configure(CloakColor color, bool useCloakShader, float? textureSaturationBoostOverride = null)
         {
-            Color          = color;
+            Color = color;
             UseCloakShader = useCloakShader;
+            _textureSaturationBoostOverride = textureSaturationBoostOverride;
             CloakSceneScanner.EnsureCreated();
             CloakSceneScanner.ReleaseEligibleUnderTransform(transform);
             _meshCacheInvalid = true;
@@ -273,7 +281,8 @@ namespace HornetCloakColor.Client
                 CloakMaterialApplier.ResolveTk2dSprite(mr),
                 Color,
                 UseCloakShader,
-                _originalShaderByRenderer);
+                _originalShaderByRenderer,
+                _textureSaturationBoostOverride);
         }
 
         private void ApplyToCachedMeshRenderersCore()
@@ -294,7 +303,8 @@ namespace HornetCloakColor.Client
                     sprite: null,
                     Color,
                     UseCloakShader,
-                    _originalShaderByRenderer);
+                    _originalShaderByRenderer,
+                    _textureSaturationBoostOverride);
             }
         }
 
@@ -308,12 +318,16 @@ namespace HornetCloakColor.Client
             return false;
         }
 
-        public static CloakRecolor? AttachOrUpdate(GameObject? playerObject, CloakColor color, bool useCloakShader)
+        public static CloakRecolor? AttachOrUpdate(
+            GameObject? playerObject,
+            CloakColor color,
+            bool useCloakShader,
+            float? textureSaturationBoostOverride = null)
         {
             if (playerObject == null) return null;
             var comp = playerObject.GetComponent<CloakRecolor>();
             if (comp == null) comp = playerObject.AddComponent<CloakRecolor>();
-            comp.Configure(color, useCloakShader);
+            comp.Configure(color, useCloakShader, textureSaturationBoostOverride);
             return comp;
         }
     }

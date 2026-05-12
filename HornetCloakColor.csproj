@@ -20,7 +20,7 @@
     <PathMap Condition="'$(Configuration)' == 'Release'">$(MSBuildProjectDirectory)=/</PathMap>
 
     <AssemblyTitle>HornetCloakColor</AssemblyTitle>
-    <Version>1.14.3</Version>
+    <Version>1.15.0</Version>
 
     <!-- Must match thunderstore/thunderstore.toml [package].namespace (used for local install folder = r2modman-style Author-Package). -->
     <ThunderstoreNamespace>Michael4d45</ThunderstoreNamespace>

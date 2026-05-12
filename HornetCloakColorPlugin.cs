@@ -22,7 +22,7 @@ namespace HornetCloakColor
         /// Keep this in sync with &lt;Version&gt; in HornetCloakColor.csproj. The BepInAutoPlugin
         /// attribute requires a compile-time constant, so we can't read from the csproj directly.
         /// </summary>
-        public const string ModVersion = "1.14.3";
+        public const string ModVersion = "1.15.0";
 
         internal static HornetCloakColorPlugin? Instance { get; private set; }
         internal static ManualLogSource? LogSource { get; private set; }
@@ -122,19 +122,41 @@ namespace HornetCloakColor
             {
                 Logger.LogInfo("SSMP detected — multiplayer cloak + username sync enabled.");
                 PushLocalCloakColorToNetwork();
+                PushLocalUsernameToNetwork();
             }
         }
 
         /// <summary>
-        /// Calls <see cref="SSMPBridge.NotifyLocalColorChanged"/> with <see cref="CloakColorConfig.EffectiveColor"/>.
-        /// Safe to call repeatedly. After registration, call at least once: while <see cref="SSMPBridge.IsRegistered"/>
-        /// was false, <see cref="SSMPBridge.NotifyLocalColorChanged"/> returned immediately and did not update the satellite.
+        /// Deferred flush only: SSMP <c>NetServer</c> may ignore the first outbound addon payloads until the client is
+        /// marked registered. Do not add per-scene resends here — keep a single post-connect policy (see
+        /// <c>ClientCosmeticsPacketSender</c>).
+        /// </summary>
+        internal static void SchedulePostConnectColorResend()
+        {
+            if (Instance == null) return;
+            Instance.StartCoroutine(Instance.PostConnectSsmpColorResendRoutine());
+        }
+
+        private IEnumerator PostConnectSsmpColorResendRoutine()
+        {
+            yield return null;
+            yield return null;
+            SSMPBridge.ResendStoredLocalColorsToServer();
+        }
+
+        /// <summary>
+        /// Calls <see cref="SSMPBridge.NotifyLocalCloakAppearanceChanged"/> with the current preset color and texture saturation.
         /// </summary>
         private void PushLocalCloakColorToNetwork()
         {
             if (!SSMPBridge.IsRegistered) return;
-            SSMPBridge.NotifyLocalColorChanged(ColorConfig.EffectiveColor);
+            SSMPBridge.NotifyLocalCloakAppearanceChanged(BuildLocalCloakNetAppearance());
         }
+
+        private CloakNetAppearance BuildLocalCloakNetAppearance() =>
+            new(
+                ColorConfig.EffectiveColor,
+                CloakNetAppearance.CentiFromMultiplier(ColorConfig.TextureSaturationBoost.Value));
 
         private void OnHeroInstanceSet(HeroController hero)
         {
@@ -142,7 +164,7 @@ namespace HornetCloakColor
             CloakColorApplier.Apply(hero.gameObject, color);
             CloakColorApplier.SetLocalSceneColor(color);
 
-            SSMPBridge.NotifyLocalColorChanged(color);
+            PushLocalCloakColorToNetwork();
             PushLocalUsernameToNetworkAndVisual();
         }
 
@@ -159,7 +181,7 @@ namespace HornetCloakColor
             }
             CloakColorApplier.SetLocalSceneColor(color);
 
-            SSMPBridge.NotifyLocalColorChanged(color);
+            PushLocalCloakColorToNetwork();
 
             LocalMapMaskTint.Refresh(global::GameManager.instance?.gameMap, color);
             // Also push to the wide / overall map (and any other already-attached local icons).
@@ -178,11 +200,10 @@ namespace HornetCloakColor
         {
             if (!SSMPBridge.IsRegistered) return;
 
-            var rgb = UsernameColorConfig.IsDisabled
-                ? CloakColor.Default
-                : UsernameColorConfig.ResolveRgb(ColorConfig);
-
-            SSMPBridge.NotifyLocalUsernameColorChanged(rgb);
+            if (UsernameColorConfig.IsDisabled)
+                SSMPBridge.ClearLocalUsernameColorOnNetwork();
+            else
+                SSMPBridge.NotifyLocalUsernameColorChanged(UsernameColorConfig.ResolveRgb(ColorConfig));
         }
 
         /// <summary>Re-tint local name text (works as soon as SSMP username Harmony is active).</summary>

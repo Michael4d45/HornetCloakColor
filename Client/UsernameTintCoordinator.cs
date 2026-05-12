@@ -99,8 +99,9 @@ namespace HornetCloakColor.Client
             bool teamsEnabled,
             bool serverAllowsCustomOverTeam)
         {
-            var remote = UsernameNetworkDelegates.GetRemoteUsernameColorOrDefault?.Invoke(playerId) ?? CloakColor.Default;
-            if (remote == CloakColor.Default) return;
+            var remoteOpt = UsernameNetworkDelegates.GetRemoteUsernameTintOrNull?.Invoke(playerId);
+            if (remoteOpt == null) return;
+            var remote = remoteOpt.Value;
 
             if (!ShouldUseCustomUsernameTint(teamOrdinal, teamsEnabled, serverAllowsCustomOverTeam)) return;
 

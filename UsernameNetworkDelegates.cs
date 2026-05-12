@@ -24,7 +24,8 @@ namespace HornetCloakColor
     internal static class UsernameNetworkDelegates
     {
         internal static Func<Transform, UsernameResolveResult>? TryResolveUsernameTransform;
-        internal static Func<ushort, CloakColor>? GetRemoteUsernameColorOrDefault;
+        /// <summary>Null when the remote has no custom username tint in the relay (use SSMP vanilla / team).</summary>
+        internal static Func<ushort, CloakColor?>? GetRemoteUsernameTintOrNull;
         internal static Func<bool>? GetTeamsEnabled;
         internal static Func<bool>? GetServerCustomUsernameOverridesTeam;
         internal static Func<int>? GetLocalPlayerTeamOrdinal;
@@ -32,7 +33,7 @@ namespace HornetCloakColor
         internal static void Clear()
         {
             TryResolveUsernameTransform = null;
-            GetRemoteUsernameColorOrDefault = null;
+            GetRemoteUsernameTintOrNull = null;
             GetTeamsEnabled = null;
             GetServerCustomUsernameOverridesTeam = null;
             GetLocalPlayerTeamOrdinal = null;

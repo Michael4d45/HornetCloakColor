@@ -16,17 +16,21 @@ namespace HornetCloakColor.SSMPIntegration
             SSMP.Api.Server.ServerAddon.RegisterAddon(server);
         }
 
-        public static void NotifyLocalColorChanged(CloakColor color)
+        public static void NotifyLocalCloakAppearanceChanged(CloakNetAppearance appearance)
         {
-            Client.ClientAddon.Instance?.SetLocalColor(color);
+            Client.ClientAddon.Instance?.SetLocalCloakAppearance(appearance);
         }
 
         public static CloakColor GetRemoteMapColorOrDefault(ushort playerId) =>
             Client.ClientAddon.Instance?.GetRemoteMapColorOrDefault(playerId) ?? CloakColor.Default;
 
-        public static void NotifyLocalUsernameColorChanged(CloakColor color)
-        {
-            Client.ClientAddon.Instance?.SetLocalUsernameColor(color);
-        }
+        public static void NotifyLocalUsernameColorChanged(CloakColor color) =>
+            Client.ClientAddon.Instance?.SetLocalUsernameTint(true, color);
+
+        public static void ClearLocalUsernameColorOnNetwork() =>
+            Client.ClientAddon.Instance?.SetLocalUsernameTint(false, default);
+
+        public static void ResendStoredLocalColorsToServer() =>
+            Client.ClientAddon.Instance?.ForceResendLocalColorsToServer();
     }
 }

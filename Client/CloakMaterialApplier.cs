@@ -34,7 +34,7 @@ namespace HornetCloakColor.Client
             public readonly int SharedMatInstanceId;
             public readonly CloakColor Color;
             public readonly AppliedMode Mode;
-            /// <summary>Last <see cref="GetTextureSaturationBoost"/> when <see cref="AppliedMode.CloakApplied"/>.</summary>
+            /// <summary>Last effective texture saturation boost when <see cref="AppliedMode.CloakApplied"/>.</summary>
             public readonly float TextureSaturationBoost;
 
             public AppliedState(int sharedMatInstanceId, CloakColor color, AppliedMode mode, float textureSaturationBoost = 0f)
@@ -121,7 +121,8 @@ namespace HornetCloakColor.Client
             tk2dBaseSprite? sprite,
             CloakColor color,
             bool useCloakShader,
-            Dictionary<MeshRenderer, Shader> originalShaderByRenderer)
+            Dictionary<MeshRenderer, Shader> originalShaderByRenderer,
+            float? textureSaturationBoostOverride = null)
         {
             if (renderer == null) return;
 
@@ -136,6 +137,7 @@ namespace HornetCloakColor.Client
             var rendererId = renderer.GetInstanceID();
             var sharedMatId = sharedCheck.GetInstanceID();
             var hasCloakShader = useCloakShader && CloakShaderManager.Shader != null;
+            var effectiveSatBoost = textureSaturationBoostOverride ?? GetTextureSaturationBoost();
 
             // Fast path: same Material instance + same intent + same color → nothing changed.
             // Do not permanently skip for NoMaskRestored until the mask lookup cache records a
@@ -147,7 +149,7 @@ namespace HornetCloakColor.Client
                 {
                     if (prev.Mode == AppliedMode.CloakApplied
                         && prev.Color.Equals(color)
-                        && Mathf.Approximately(prev.TextureSaturationBoost, GetTextureSaturationBoost()))
+                        && Mathf.Approximately(prev.TextureSaturationBoost, effectiveSatBoost))
                         return;
                     if (prev.Mode == AppliedMode.NoMaskRestored)
                     {
@@ -199,7 +201,7 @@ namespace HornetCloakColor.Client
                 else
                 {
                     EnsureCloakShader(renderer, mat, originalShaderByRenderer);
-                    ApplyShaderProperties(mat, sprite, color, mask);
+                    ApplyShaderProperties(mat, sprite, color, mask, effectiveSatBoost);
                     finalMode = AppliedMode.CloakApplied;
                 }
             }
@@ -216,7 +218,7 @@ namespace HornetCloakColor.Client
             var finalSharedMat = renderer.sharedMaterial;
             if (finalSharedMat != null)
             {
-                var boost = finalMode == AppliedMode.CloakApplied ? GetTextureSaturationBoost() : 0f;
+                var boost = finalMode == AppliedMode.CloakApplied ? effectiveSatBoost : 0f;
                 AppliedByRenderer[rendererId] = new AppliedState(finalSharedMat.GetInstanceID(), finalColor, finalMode, boost);
             }
         }
@@ -279,7 +281,7 @@ namespace HornetCloakColor.Client
             if (tex != null) mat.mainTexture = tex;
         }
 
-        private static void ApplyShaderProperties(Material mat, tk2dBaseSprite? sprite, CloakColor color, Texture2D mask)
+        private static void ApplyShaderProperties(Material mat, tk2dBaseSprite? sprite, CloakColor color, Texture2D mask, float satBoost)
         {
             // Keep sprite.vertex color as authored (attack flashes, tk2d animation). The fragment
             // shader multiplies by IN.color; stomping to white broke dash/hit presentation.
@@ -295,7 +297,6 @@ namespace HornetCloakColor.Client
 
             color.ToHSV(out var h, out var s, out var v);
             mat.SetFloat(CloakShaderManager.TargetHueId, h);
-            var satBoost = GetTextureSaturationBoost();
             mat.SetFloat(CloakShaderManager.TargetSatId, s <= 0.001f ? 0f : satBoost);
             mat.SetFloat(CloakShaderManager.TargetValId, Mathf.Lerp(0.6f, 1.4f, v));
             mat.SetFloat(CloakShaderManager.StrengthId, 1f);

@@ -11,16 +11,16 @@ namespace HornetCloakColor.Client
     /// </summary>
     internal static class MpRemoteCloakReapply
     {
-        internal static void Schedule(GameObject? playerObject, CloakColor color)
+        internal static void Schedule(GameObject? playerObject, CloakNetAppearance appearance)
         {
             if (playerObject == null) return;
             var plugin = HornetCloakColorPlugin.Instance;
             if (plugin == null) return;
 
-            plugin.StartCoroutine(ReapplyRoutine(playerObject, color));
+            plugin.StartCoroutine(ReapplyRoutine(playerObject, appearance));
         }
 
-        private static IEnumerator ReapplyRoutine(GameObject playerObject, CloakColor color)
+        private static IEnumerator ReapplyRoutine(GameObject playerObject, CloakNetAppearance appearance)
         {
             // Let SpawnPlayer / SkinManager / animator finish mutating materials first.
             yield return null;
@@ -31,7 +31,10 @@ namespace HornetCloakColor.Client
                 if (!playerObject)
                     yield break;
 
-                CloakColorApplier.Apply(playerObject, color);
+                CloakColorApplier.Apply(
+                    playerObject,
+                    appearance.Color,
+                    appearance.TextureSaturationMultiplier);
                 playerObject.GetComponent<CloakRecolor>()?.ForceHierarchyRefresh();
                 yield return null;
             }

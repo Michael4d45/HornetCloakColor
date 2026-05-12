@@ -3,19 +3,13 @@ using System.Collections.Generic;
 using HornetCloakColor;
 using HornetCloakColor.Shared;
 using SSMP.Api.Client;
-using SSMP.Api.Client.Networking;
 using UnityEngine;
 
 namespace HornetCloakColor.Client
 {
     /// <summary>
-    /// SSMP client-side addon. Responsible for:
-    /// <list type="bullet">
-    ///   <item>Sending the local player's cloak color to the server.</item>
-    ///   <item>Receiving other players' cloak colors from the server.</item>
-    ///   <item>Applying colors to the correct player objects as they enter scenes.</item>
-    ///   <item>Username tint sync + server rule for team override.</item>
-    /// </list>
+    /// SSMP client-side addon. Inbound handlers + presentation; outbound cosmetics use
+    /// <see cref="ClientCosmeticsPacketSender"/> (SSMP.Essentials-style single <c>SendSingleData</c> path).
     /// </summary>
     internal class ClientAddon : SSMP.Api.Client.ClientAddon
     {
@@ -30,21 +24,22 @@ namespace HornetCloakColor.Client
         internal static ClientAddon? Instance { get; private set; }
 
         /// <summary>
-        /// Cache of the latest known color for each remote player. We keep this so that when a
-        /// player enters the local scene we can reapply the tint (the SSMP renderer may be
-        /// reparented/rebuilt between scenes, which resets material color).
+        /// Cache of the latest known cloak appearance (RGB + texture saturation) per remote player for
+        /// reapply on scene enter / material rebuilds.
         /// </summary>
-        private readonly Dictionary<ushort, CloakColor> _playerColors = new();
+        private readonly Dictionary<ushort, CloakNetAppearance> _playerCloakAppearances = new();
 
         private readonly Dictionary<ushort, CloakColor> _playerUsernameColors = new();
 
         private IClientApi? _api;
-        private IClientAddonNetworkSender<PacketId>? _sender;
 
-        /// <summary>The color the local player most recently chose, broadcast to the server.</summary>
-        private CloakColor _localColor = CloakColor.Default;
+        /// <summary>The local player's last announced cloak appearance (RGB + texture saturation).</summary>
+        private CloakNetAppearance _localCloakAppearance = CloakNetAppearance.Default;
 
         private CloakColor _localUsernameColor = CloakColor.Default;
+
+        /// <summary>When false, the next send tells the server to drop our username tint (Mod Menu Disabled).</summary>
+        private bool _localUsernameHasCustomTint;
 
         private bool _serverCustomUsernameOverridesTeam;
 
@@ -53,9 +48,10 @@ namespace HornetCloakColor.Client
             Instance = this;
             _api = clientApi;
 
-            _sender = clientApi.NetClient.GetNetworkSender<PacketId>(this);
+            var sender = clientApi.NetClient.GetNetworkSender<PacketId>(this);
+            ClientCosmeticsPacketSender.Init(clientApi, sender);
 
-            var receiver = clientApi.NetClient.GetNetworkReceiver<PacketId>(this, PacketFactory.Instantiate);
+            var receiver = clientApi.NetClient.GetNetworkReceiver<PacketId>(this, ClientAddonReceivePacketFactory.Instantiate);
             receiver.RegisterPacketHandler<CloakColorPacket>(PacketId.CloakColorUpdate, OnCloakColorUpdate);
             receiver.RegisterPacketHandler<UsernameColorPacket>(PacketId.UsernameColorUpdate, OnUsernameColorUpdate);
             receiver.RegisterPacketHandler<ServerUsernameColorRulesPacket>(
@@ -75,7 +71,7 @@ namespace HornetCloakColor.Client
         private void PushUsernameDelegates()
         {
             UsernameNetworkDelegates.TryResolveUsernameTransform = TryResolveUsernameTransform;
-            UsernameNetworkDelegates.GetRemoteUsernameColorOrDefault = GetRemoteUsernameColorOrDefault;
+            UsernameNetworkDelegates.GetRemoteUsernameTintOrNull = GetRemoteUsernameTintOrNull;
             UsernameNetworkDelegates.GetTeamsEnabled = () => _api!.ClientManager.ServerSettings.TeamsEnabled;
             UsernameNetworkDelegates.GetServerCustomUsernameOverridesTeam = () => _serverCustomUsernameOverridesTeam;
             UsernameNetworkDelegates.GetLocalPlayerTeamOrdinal = () =>
@@ -83,29 +79,30 @@ namespace HornetCloakColor.Client
         }
 
         /// <summary>
-        /// Remember the local player's color and broadcast it to the server.
+        /// Remember the local player's cloak appearance and broadcast it to the server.
         /// The local hero's visual is applied by the plugin directly so this path also runs
         /// when SSMP isn't loaded. Safe to call before connecting — the send is a no-op then.
         /// </summary>
-        public void SetLocalColor(CloakColor color)
+        public void SetLocalCloakAppearance(CloakNetAppearance appearance)
         {
-            _localColor = color;
-            SendLocalColor();
+            _localCloakAppearance = appearance;
+            ClientCosmeticsPacketSender.TrySendCloakUpdate(_localCloakAppearance);
         }
 
-        /// <summary>Broadcast username tint (or white to clear) while connected.</summary>
-        public void SetLocalUsernameColor(CloakColor color)
+        /// <summary>Broadcast username tint while connected (including literal white / match-cloak default).</summary>
+        public void SetLocalUsernameTint(bool hasCustomUsernameTint, CloakColor color)
         {
+            _localUsernameHasCustomTint = hasCustomUsernameTint;
             _localUsernameColor = color;
-            SendLocalUsernameColor();
+            ClientCosmeticsPacketSender.TrySendUsernameUpdate(_localUsernameHasCustomTint, _localUsernameColor);
         }
 
         /// <summary>Latest color for another player's cloak (from server). Used for map mask tint.</summary>
         internal CloakColor GetRemoteMapColorOrDefault(ushort playerId) =>
-            _playerColors.TryGetValue(playerId, out var c) ? c : CloakColor.Default;
+            _playerCloakAppearances.TryGetValue(playerId, out var a) ? a.Color : CloakColor.Default;
 
-        internal CloakColor GetRemoteUsernameColorOrDefault(ushort playerId) =>
-            _playerUsernameColors.TryGetValue(playerId, out var c) ? c : CloakColor.Default;
+        internal CloakColor? GetRemoteUsernameTintOrNull(ushort playerId) =>
+            _playerUsernameColors.TryGetValue(playerId, out var c) ? c : null;
 
         private UsernameResolveResult TryResolveUsernameTransform(Transform t)
         {
@@ -171,35 +168,23 @@ namespace HornetCloakColor.Client
             return false;
         }
 
-        private void SendLocalColor()
-        {
-            if (_api == null || _sender == null) return;
-            if (!_api.NetClient.IsConnected) return;
-
-            _sender.SendSingleData(PacketId.CloakColorUpdate, new CloakColorPacket
-            {
-                PlayerId = 0, // ignored by server; it infers sender
-                Color = _localColor,
-            });
-        }
-
-        private void SendLocalUsernameColor()
-        {
-            if (_api == null || _sender == null) return;
-            if (!_api.NetClient.IsConnected) return;
-
-            _sender.SendSingleData(PacketId.UsernameColorUpdate, new UsernameColorPacket
-            {
-                PlayerId = 0,
-                Color = _localUsernameColor,
-            });
-        }
+        /// <summary>
+        /// Used by <see cref="SSMPBridge.ResendStoredLocalColorsToServer"/> (post-connect delayed flush only).
+        /// </summary>
+        internal void ForceResendLocalColorsToServer() =>
+            ClientCosmeticsPacketSender.TrySendStoredLocal(
+                _localCloakAppearance,
+                _localUsernameHasCustomTint,
+                _localUsernameColor);
 
         private void OnConnected()
         {
             PushUsernameDelegates();
-            SendLocalColor();
-            SendLocalUsernameColor();
+            ClientCosmeticsPacketSender.TrySendStoredLocal(
+                _localCloakAppearance,
+                _localUsernameHasCustomTint,
+                _localUsernameColor);
+            SSMPBridge.SchedulePostConnectColorResend();
         }
 
         private void OnDisconnected()
@@ -211,12 +196,15 @@ namespace HornetCloakColor.Client
 
         private void OnPlayerEnterScene(IClientPlayer player)
         {
-            if (_playerColors.TryGetValue(player.Id, out var color) && player.PlayerObject != null)
+            if (_playerCloakAppearances.TryGetValue(player.Id, out var appearance) && player.PlayerObject != null)
             {
-                CloakColorApplier.Apply(player.PlayerObject, color);
+                CloakColorApplier.Apply(
+                    player.PlayerObject,
+                    appearance.Color,
+                    appearance.TextureSaturationMultiplier);
                 // Skin/tk2d can stomp materials after this callback — reinforce tint across frames.
                 if (!IsLocalHeroPlayer(player))
-                    MpRemoteCloakReapply.Schedule(player.PlayerObject, color);
+                    MpRemoteCloakReapply.Schedule(player.PlayerObject, appearance);
             }
 
             // Spawn finishes assigning PlayerContainer after the initial ChangeNameColor call; reapply any
@@ -236,21 +224,25 @@ namespace HornetCloakColor.Client
 
         private void OnPlayerDisconnect(IClientPlayer player)
         {
-            _playerColors.Remove(player.Id);
+            _playerCloakAppearances.Remove(player.Id);
             _playerUsernameColors.Remove(player.Id);
         }
 
         private void OnCloakColorUpdate(CloakColorPacket data)
         {
-            _playerColors[data.PlayerId] = data.Color;
+            var appearance = new CloakNetAppearance(data.Color, data.TextureSaturationCenti);
+            _playerCloakAppearances[data.PlayerId] = appearance;
 
-            PlayerMapMaskTintRegistry.SetColor(data.PlayerId, data.Color);
+            PlayerMapMaskTintRegistry.SetColor(data.PlayerId, appearance.Color);
 
             var player = _api?.ClientManager.GetPlayer(data.PlayerId);
             if (player?.PlayerObject != null)
             {
-                CloakColorApplier.Apply(player.PlayerObject, data.Color);
-                MpRemoteCloakReapply.Schedule(player.PlayerObject, data.Color);
+                CloakColorApplier.Apply(
+                    player.PlayerObject,
+                    appearance.Color,
+                    appearance.TextureSaturationMultiplier);
+                MpRemoteCloakReapply.Schedule(player.PlayerObject, appearance);
             }
         }
 
@@ -261,7 +253,7 @@ namespace HornetCloakColor.Client
 
         private void OnUsernameColorUpdate(UsernameColorPacket data)
         {
-            if (data.Color == CloakColor.Default)
+            if (!data.HasCustomUsernameTint)
                 _playerUsernameColors.Remove(data.PlayerId);
             else
                 _playerUsernameColors[data.PlayerId] = data.Color;
@@ -285,10 +277,8 @@ namespace HornetCloakColor.Client
 
             SsmpUsernameVanillaColors.ApplyTeamColor(tmp, player.Team);
 
-            if (_playerUsernameColors.TryGetValue(playerId, out var c) && c != CloakColor.Default)
-            {
+            if (_playerUsernameColors.ContainsKey(playerId))
                 UsernameTintCoordinator.ApplyRemoteUsernameAfterSync(tmp, playerId, (int)player.Team);
-            }
         }
 
         private static GameObject? FindDeepChildByName(GameObject root, string name)

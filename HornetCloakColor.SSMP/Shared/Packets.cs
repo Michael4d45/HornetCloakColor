@@ -1,4 +1,5 @@
 using SSMP.Networking.Packet;
+using SSMP.Networking.Packet.Data;
 
 namespace HornetCloakColor.Shared
 {
@@ -27,10 +28,11 @@ namespace HornetCloakColor.Shared
     }
 
     /// <summary>
-    /// Packet carrying a cloak color for a given player.
+    /// Packet carrying cloak color and texture saturation for a given player (see mod menu
+    /// “texture saturation” / <c>_TargetSat</c> scaling in the cloak shader).
     ///
     /// Client -> Server: the player ID field is ignored; the server infers the sender.
-    /// Server -> Client: the player ID is the owner of the color.
+    /// Server -> Client: the player ID is the owner of the appearance.
     /// </summary>
     internal class CloakColorPacket : IPacketData
     {
@@ -40,12 +42,18 @@ namespace HornetCloakColor.Shared
         public ushort PlayerId;
         public CloakColor Color;
 
+        /// <summary>
+        /// Texture saturation boost × 100 (0–200, default 100 = 1.0). Matches <see cref="CloakNetAppearance.TextureSaturationCenti"/>.
+        /// </summary>
+        public byte TextureSaturationCenti = 100;
+
         public void WriteData(IPacket packet)
         {
             packet.Write(PlayerId);
             packet.Write(Color.R);
             packet.Write(Color.G);
             packet.Write(Color.B);
+            packet.Write(TextureSaturationCenti);
         }
 
         public void ReadData(IPacket packet)
@@ -55,11 +63,15 @@ namespace HornetCloakColor.Shared
             var g = packet.ReadByte();
             var b = packet.ReadByte();
             Color = new CloakColor(r, g, b);
+            TextureSaturationCenti = packet.ReadByte();
         }
     }
 
     /// <summary>
-    /// Same wire layout as <see cref="CloakColorPacket"/> — separate type for clarity.
+    /// Username tint sync. Client to server: <see cref="PlayerId"/> is ignored (sender is inferred).
+    /// <see cref="HasCustomUsernameTint"/> false = stop syncing (Mod Menu Disabled); true = sync
+    /// <see cref="Color"/> including literal white (255,255,255), which is distinct from Disabled
+    /// because that RGB equals <see cref="CloakColor.Default"/>.
     /// </summary>
     internal class UsernameColorPacket : IPacketData
     {
@@ -69,12 +81,16 @@ namespace HornetCloakColor.Shared
         public ushort PlayerId;
         public CloakColor Color;
 
+        /// <summary>False: remove this player from the username-tint relay. True: apply <see cref="Color"/>.</summary>
+        public bool HasCustomUsernameTint;
+
         public void WriteData(IPacket packet)
         {
             packet.Write(PlayerId);
             packet.Write(Color.R);
             packet.Write(Color.G);
             packet.Write(Color.B);
+            packet.Write(HasCustomUsernameTint);
         }
 
         public void ReadData(IPacket packet)
@@ -84,6 +100,7 @@ namespace HornetCloakColor.Shared
             var g = packet.ReadByte();
             var b = packet.ReadByte();
             Color = new CloakColor(r, g, b);
+            HasCustomUsernameTint = packet.ReadBool();
         }
     }
 
@@ -105,20 +122,39 @@ namespace HornetCloakColor.Shared
             CustomUsernameColorsOverrideTeamColors = packet.ReadBool();
     }
 
-    internal static class PacketFactory
+    /// <summary>
+    /// Instantiator for <b>server</b> addon receivers. Clients send cosmetics with
+    /// <see cref="SSMP.Api.Client.Networking.IClientAddonNetworkSender{T}.SendSingleData"/>, so inbound payloads are
+    /// single <see cref="CloakColorPacket"/> / <see cref="UsernameColorPacket"/> (no collection length prefix).
+    /// </summary>
+    internal static class ServerAddonReceivePacketFactory
     {
-        /// <summary>
-        /// Shared instantiator used by both client and server receivers.
-        /// </summary>
-        public static IPacketData Instantiate(PacketId id)
-        {
-            return id switch
+        public static IPacketData Instantiate(PacketId id) =>
+            id switch
             {
                 PacketId.CloakColorUpdate => new CloakColorPacket(),
                 PacketId.UsernameColorUpdate => new UsernameColorPacket(),
                 PacketId.ServerUsernameColorRules => new ServerUsernameColorRulesPacket(),
                 _ => new CloakColorPacket(),
             };
-        }
+    }
+
+    /// <summary>
+    /// Instantiator for <b>client</b> addon receivers. The server mirrors
+    /// <c>SSMPEssentials.Server.PacketSender.Broadcast</c> using
+    /// <see cref="SSMP.Api.Server.Networking.IServerAddonNetworkSender{T}.SendCollectionData{T}"/>, which SSMP
+    /// serializes as <see cref="PacketDataCollection{T}"/> (count + instances). Same pattern as
+    /// <c>SSMPEssentials.Server.Packets.Packets.Instantiate</c> for <c>PlayerHealth</c> / <c>Color</c>.
+    /// </summary>
+    internal static class ClientAddonReceivePacketFactory
+    {
+        public static IPacketData Instantiate(PacketId id) =>
+            id switch
+            {
+                PacketId.CloakColorUpdate => new PacketDataCollection<CloakColorPacket>(),
+                PacketId.UsernameColorUpdate => new PacketDataCollection<UsernameColorPacket>(),
+                PacketId.ServerUsernameColorRules => new ServerUsernameColorRulesPacket(),
+                _ => new PacketDataCollection<CloakColorPacket>(),
+            };
     }
 }

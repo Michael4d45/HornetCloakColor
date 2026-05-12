@@ -63,7 +63,7 @@ namespace HornetCloakColor.Interop
 
         /// <summary>Last synced username tint for a remote player (white if none).</summary>
         public static CloakColor GetSyncedRemoteUsernameRgbOrDefault(ushort networkPlayerId) =>
-            UsernameNetworkDelegates.GetRemoteUsernameColorOrDefault?.Invoke(networkPlayerId) ?? CloakColor.Default;
+            UsernameNetworkDelegates.GetRemoteUsernameTintOrNull?.Invoke(networkPlayerId) ?? CloakColor.Default;
     }
 
     /// <summary>
