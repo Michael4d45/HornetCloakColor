@@ -4,8 +4,8 @@
 //     HornetCloakColor -> Build Shader Bundle
 //
 // from the editor menu. The built bundle is written to <project>/Build/cloakshader.bundle
-// and should be copied to HornetCloakColor/Resources/<platform>/shaders.bundle in this repo
-// (windows, linux, or macos — see CloakShaderManager).
+// and should be copied to HornetCloakColor/Resources/<platform>/cloakshader.bundle in this repo
+// (windows, linux, or mac — see CloakShaderManager).
 //
 // The mod loads the bundle as an embedded resource so end users do not have to copy it
 // alongside the DLL.
@@ -132,10 +132,10 @@ namespace HornetCloakColor.EditorTools
             var produced = Path.Combine(outDir, BundleName);
             var modRel = target switch
             {
-                BuildTarget.StandaloneWindows64 => "HornetCloakColor/Resources/windows/shaders.bundle",
-                BuildTarget.StandaloneLinux64 => "HornetCloakColor/Resources/linux/shaders.bundle",
-                BuildTarget.StandaloneOSX => "HornetCloakColor/Resources/macos/shaders.bundle",
-                _ => "HornetCloakColor/Resources/<platform>/shaders.bundle",
+                BuildTarget.StandaloneWindows64 => "HornetCloakColor/Resources/windows/cloakshader.bundle",
+                BuildTarget.StandaloneLinux64 => "HornetCloakColor/Resources/linux/cloakshader.bundle",
+                BuildTarget.StandaloneOSX => "HornetCloakColor/Resources/mac/cloakshader.bundle",
+                _ => "HornetCloakColor/Resources/<platform>/cloakshader.bundle",
             };
             Debug.Log($"[HornetCloakColor] Built {produced} for {target} (CloakHueShift). " +
                       $"Copy this to {modRel} in the mod repo (bake all three OS targets for release).");

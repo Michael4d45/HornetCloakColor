@@ -310,11 +310,31 @@ namespace HornetCloakColor.Client
             return Mathf.Clamp(inst.ColorConfig.TextureSaturationBoost.Value, 0f, 2f);
         }
 
+        /// <summary>
+        /// tk2d sets <see cref="Mesh.colors"/> from <c>sprite.color</c>. During some rebuild frames the
+        /// mesh vertex count and existing color array can disagree; Unity then logs "Mesh.colors is out
+        /// of bounds". Skip the sprite write in that state (material tint still applies where shaders use it).
+        /// </summary>
+        internal static bool Tk2dSpriteVertexColorsSafeToMutate(tk2dBaseSprite sprite)
+        {
+            if (sprite == null) return false;
+            var mf = sprite.GetComponent<MeshFilter>();
+            var mesh = mf != null ? mf.sharedMesh : null;
+            if (mesh == null) return false;
+            var vc = mesh.vertexCount;
+            if (vc <= 0) return false;
+            var cols = mesh.colors;
+            if (cols != null && cols.Length > 0 && cols.Length != vc)
+                return false;
+            return true;
+        }
+
         private static void ApplyVertexTint(Material mat, tk2dBaseSprite? sprite, CloakColor color)
         {
             var unityColor = color.ToUnityColor();
-            if (sprite != null) sprite.color = unityColor;
             mat.color = unityColor;
+            if (sprite != null && Tk2dSpriteVertexColorsSafeToMutate(sprite))
+                sprite.color = unityColor;
         }
 
         public static void PruneDestroyed(Dictionary<MeshRenderer, Shader> map)

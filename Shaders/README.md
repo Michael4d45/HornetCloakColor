@@ -48,9 +48,9 @@ the failure.
 
    | Unity menu build | Copy to |
    | ---------------- | ------- |
-   | Windows | `HornetCloakColor/Resources/windows/shaders.bundle` |
-   | Linux | `HornetCloakColor/Resources/linux/shaders.bundle` |
-   | macOS | `HornetCloakColor/Resources/macos/shaders.bundle` |
+   | Windows | `HornetCloakColor/Resources/windows/cloakshader.bundle` |
+   | Linux | `HornetCloakColor/Resources/linux/cloakshader.bundle` |
+   | macOS | `HornetCloakColor/Resources/mac/cloakshader.bundle` |
 
    For a Thunderstore release, bake **all three** so every platform gets the correct shader
    bytecode inside the same DLL.

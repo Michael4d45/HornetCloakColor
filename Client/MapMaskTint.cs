@@ -162,6 +162,8 @@ namespace HornetCloakColor.Client
             foreach (var sprite in _sprites)
             {
                 if (sprite == null) continue;
+                if (!CloakMaterialApplier.Tk2dSpriteVertexColorsSafeToMutate(sprite))
+                    continue;
                 var current = sprite.color;
                 if (current.r == tint.r && current.g == tint.g && current.b == tint.b)
                     continue;

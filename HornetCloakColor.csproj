@@ -20,7 +20,7 @@
     <PathMap Condition="'$(Configuration)' == 'Release'">$(MSBuildProjectDirectory)=/</PathMap>
 
     <AssemblyTitle>HornetCloakColor</AssemblyTitle>
-    <Version>1.14.2</Version>
+    <Version>1.14.3</Version>
 
     <!-- Must match thunderstore/thunderstore.toml [package].namespace (used for local install folder = r2modman-style Author-Package). -->
     <ThunderstoreNamespace>Michael4d45</ThunderstoreNamespace>
@@ -79,26 +79,26 @@
 
   <!--
   Embed platform-specific cloak-tint shader bundles (Unity builds differ per OS).
-  Logical names match CloakShaderManager (windows|linux|macos/shaders.bundle).
+  Logical names match CloakShaderManager (windows|linux|mac/cloakshader.bundle).
   If no bundle is present the mod still works — whole-character vertex tint fallback.
   -->
-  <ItemGroup Condition="Exists('Resources/windows/shaders.bundle')">
-    <EmbeddedResource Include="Resources/windows/shaders.bundle">
-      <LogicalName>windows/shaders.bundle</LogicalName>
+  <ItemGroup Condition="Exists('Resources/windows/cloakshader.bundle')">
+    <EmbeddedResource Include="Resources/windows/cloakshader.bundle">
+      <LogicalName>windows/cloakshader.bundle</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
-  <ItemGroup Condition="Exists('Resources/linux/shaders.bundle')">
-    <EmbeddedResource Include="Resources/linux/shaders.bundle">
-      <LogicalName>linux/shaders.bundle</LogicalName>
+  <ItemGroup Condition="Exists('Resources/linux/cloakshader.bundle')">
+    <EmbeddedResource Include="Resources/linux/cloakshader.bundle">
+      <LogicalName>linux/cloakshader.bundle</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
-  <ItemGroup Condition="Exists('Resources/macos/shaders.bundle')">
-    <EmbeddedResource Include="Resources/macos/shaders.bundle">
-      <LogicalName>macos/shaders.bundle</LogicalName>
+  <ItemGroup Condition="Exists('Resources/mac/cloakshader.bundle')">
+    <EmbeddedResource Include="Resources/mac/cloakshader.bundle">
+      <LogicalName>mac/cloakshader.bundle</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
-  <Target Name="WarnIfShaderBundleMissing" BeforeTargets="CoreCompile" Condition="!Exists('Resources/windows/shaders.bundle') And !Exists('Resources/linux/shaders.bundle') And !Exists('Resources/macos/shaders.bundle')">
-    <Message Importance="High" Text="No cloak shader bundles under Resources/ (windows|linux|macos/shaders.bundle). Cloak-only mode will fall back to whole-character tint at runtime. See Shaders/README.md to bake bundles." />
+  <Target Name="WarnIfShaderBundleMissing" BeforeTargets="CoreCompile" Condition="!Exists('Resources/windows/cloakshader.bundle') And !Exists('Resources/linux/cloakshader.bundle') And !Exists('Resources/mac/cloakshader.bundle')">
+    <Message Importance="High" Text="No cloak shader bundles under Resources/ (windows|linux|mac/cloakshader.bundle). Cloak-only mode will fall back to whole-character tint at runtime. See Shaders/README.md to bake bundles." />
   </Target>
 
   <Target Name="BuildSSMPSatellite" BeforeTargets="CopyAndPackageMod">

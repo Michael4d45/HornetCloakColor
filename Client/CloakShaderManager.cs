@@ -8,7 +8,7 @@ namespace HornetCloakColor.Client
 {
     /// <summary>
     /// Loads cloak shaders from a platform-specific AssetBundle embedded in the mod DLL
-    /// (<c>windows/shaders.bundle</c>, <c>linux/shaders.bundle</c>, <c>macos/shaders.bundle</c>).
+    /// (<c>windows/cloakshader.bundle</c>, <c>linux/cloakshader.bundle</c>, <c>mac/cloakshader.bundle</c>).
     /// </summary>
     internal static class CloakShaderManager
     {
@@ -19,11 +19,11 @@ namespace HornetCloakColor.Client
         private static string? ShaderBundleResourceNameForCurrentOs()
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                return "windows/shaders.bundle";
+                return "windows/cloakshader.bundle";
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-                return "linux/shaders.bundle";
+                return "linux/cloakshader.bundle";
             if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-                return "macos/shaders.bundle";
+                return "mac/cloakshader.bundle";
             return null;
         }
 
