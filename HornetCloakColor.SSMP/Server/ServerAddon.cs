@@ -80,7 +80,7 @@ namespace HornetCloakColor.Server
             {
                 if (kvp.Key == player.Id) continue;
 
-                _sender.SendSingleData(PacketId.CloakColorUpdate, new CloakColorPacket
+                _sender.SendCollectionData(PacketId.CloakColorUpdate, new CloakColorPacket
                 {
                     PlayerId = kvp.Key,
                     Color = kvp.Value,
@@ -93,7 +93,7 @@ namespace HornetCloakColor.Server
             {
                 if (kvp.Key == player.Id) continue;
 
-                _sender.SendSingleData(PacketId.UsernameColorUpdate, new UsernameColorPacket
+                _sender.SendCollectionData(PacketId.UsernameColorUpdate, new UsernameColorPacket
                 {
                     PlayerId = kvp.Key,
                     Color = kvp.Value,
@@ -123,7 +123,7 @@ namespace HornetCloakColor.Server
             {
                 if (other.Id == senderId) continue;
 
-                _sender.SendSingleData(PacketId.CloakColorUpdate, new CloakColorPacket
+                _sender.SendCollectionData(PacketId.CloakColorUpdate, new CloakColorPacket
                 {
                     PlayerId = senderId,
                     Color = data.Color,
@@ -144,7 +144,7 @@ namespace HornetCloakColor.Server
             {
                 if (other.Id == senderId) continue;
 
-                _sender.SendSingleData(PacketId.UsernameColorUpdate, new UsernameColorPacket
+                _sender.SendCollectionData(PacketId.UsernameColorUpdate, new UsernameColorPacket
                 {
                     PlayerId = senderId,
                     Color = data.Color,
