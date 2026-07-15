@@ -13,8 +13,6 @@ namespace HornetCloakColor.Client
     /// </summary>
     internal class ClientAddon : SSMP.Api.Client.ClientAddon
     {
-        private const string UsernameObjectName = "Username";
-
         protected override string Name => "HornetCloakColor";
         protected override string Version => HornetCloakColorPlugin.ModVersion;
         public override uint ApiVersion => 1;
@@ -137,7 +135,7 @@ namespace HornetCloakColor.Client
         private static bool TryResolveRemoteByPlayerContainerAncestor(Transform t, out ushort playerId)
         {
             playerId = 0;
-            const string prefix = "Player Container ";
+            const string prefix = SsmpSceneNames.PlayerContainerPrefix;
             for (var p = t; p != null; p = p.parent)
             {
                 var name = p.name;
@@ -269,7 +267,7 @@ namespace HornetCloakColor.Client
             var container = player.PlayerContainer;
             if (container == null) return;
 
-            var nameGo = FindDeepChildByName(container, UsernameObjectName);
+            var nameGo = FindDeepChildByName(container, SsmpSceneNames.UsernameObjectName);
             if (nameGo == null) return;
 
             var tmp = UsernameTmpCompat.FindOnGameObject(nameGo);

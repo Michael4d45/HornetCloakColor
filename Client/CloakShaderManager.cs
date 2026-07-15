@@ -47,8 +47,6 @@ namespace HornetCloakColor.Client
             }
         }
 
-        public static bool BundleMissing => _bundleInitialized && _shader == null;
-
         private static bool _bundleInitialized;
 
         private static void EnsureInitialized()

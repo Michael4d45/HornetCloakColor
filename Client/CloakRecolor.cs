@@ -213,12 +213,6 @@ namespace HornetCloakColor.Client
             ApplyToCachedMeshRenderersCore();
         }
 
-        public void SetColor(CloakColor color)
-        {
-            Color = color;
-            ApplyToCachedMeshRenderersCore();
-        }
-
         private void MaybeRefreshMeshCache()
         {
             if (_meshCacheInvalid)
@@ -308,12 +302,12 @@ namespace HornetCloakColor.Client
             }
         }
 
-        /// <summary>Matches <c>SSMP.Game.Client.PlayerManager.UsernameObjectName</c> ("Username").</summary>
+        /// <summary>Matches <c>SSMP.Game.Client.PlayerManager.UsernameObjectName</c>.</summary>
         private static bool IsUnderSsmpUsernameObject(Transform t)
         {
             for (var p = t; p != null; p = p.parent)
             {
-                if (p.name == "Username") return true;
+                if (p.name == SsmpSceneNames.UsernameObjectName) return true;
             }
             return false;
         }

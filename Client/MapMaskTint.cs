@@ -93,7 +93,7 @@ namespace HornetCloakColor.Client
         {
             if (_networkPlayerId.HasValue
                 && !_color.Equals(color)
-                && CloakPaletteConfig.DebugLogging)
+                && CloakPaletteConfig.LogMapIconDiagnostics)
             {
                 Log.Info($"MapMaskTint: remote player {_networkPlayerId.Value} color updated {_color} -> {color}");
             }
@@ -218,7 +218,7 @@ namespace HornetCloakColor.Client
                   .AppendLine();
             }
 
-            HornetCloakColorPlugin.LogSource?.LogInfo(sb.ToString());
+            Log.Info(sb.ToString());
         }
 
         private static string GetPath(Transform t)

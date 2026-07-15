@@ -20,15 +20,15 @@
     <PathMap Condition="'$(Configuration)' == 'Release'">$(MSBuildProjectDirectory)=/</PathMap>
 
     <AssemblyTitle>HornetCloakColor</AssemblyTitle>
-    <Version>1.15.0</Version>
+    <Version>1.15.1</Version>
 
     <!-- Must match thunderstore/thunderstore.toml [package].namespace (used for local install folder = r2modman-style Author-Package). -->
     <ThunderstoreNamespace>Michael4d45</ThunderstoreNamespace>
     <ThunderstorePluginInstallFolder>$(ThunderstoreNamespace)-$(AssemblyTitle)</ThunderstorePluginInstallFolder>
     <ThunderstoreWebsiteUrl>https://github.com/Michael4d45/HornetCloakColor</ThunderstoreWebsiteUrl>
     <!-- Bump these together with [package.dependencies] in thunderstore.toml. -->
-    <ThunderstoreBepInExPackVersion>5.4.2304</ThunderstoreBepInExPackVersion>
-    <ThunderstoreModMenuVersion>0.7.4</ThunderstoreModMenuVersion>
+    <ThunderstoreBepInExPackVersion>1.0.3</ThunderstoreBepInExPackVersion>
+    <ThunderstoreModMenuVersion>0.7.6</ThunderstoreModMenuVersion>
     <ThunderstoreManifestDescription>Change the color of Hornet's cloak. Fully synchronized with other SSMP players.</ThunderstoreManifestDescription>
 
     <BepInExPluginGuid>hornet.cloak.color</BepInExPluginGuid>
@@ -108,7 +108,7 @@
   <!-- Repo manifest.json: tooling / mirrors; tcli still reads thunderstore.toml for the published zip. Version and deps follow MSBuild properties above. -->
   <Target Name="GenerateThunderstoreManifest" BeforeTargets="BeforeBuild">
     <PropertyGroup>
-      <_ManifestLine>{&quot;name&quot;:&quot;$(AssemblyTitle)&quot;,&quot;version_number&quot;:&quot;$(Version)&quot;,&quot;website_url&quot;:&quot;$(ThunderstoreWebsiteUrl)&quot;,&quot;description&quot;:&quot;$(ThunderstoreManifestDescription)&quot;,&quot;dependencies&quot;:[&quot;BepInEx-BepInExPack_Silksong-$(ThunderstoreBepInExPackVersion)&quot;,&quot;silksong_modding-ModMenu-$(ThunderstoreModMenuVersion)&quot;]}</_ManifestLine>
+      <_ManifestLine>{&quot;name&quot;:&quot;$(AssemblyTitle)&quot;,&quot;version_number&quot;:&quot;$(Version)&quot;,&quot;website_url&quot;:&quot;$(ThunderstoreWebsiteUrl)&quot;,&quot;description&quot;:&quot;$(ThunderstoreManifestDescription)&quot;,&quot;dependencies&quot;:[&quot;silksong_modding-BepInExPack_Silksong-$(ThunderstoreBepInExPackVersion)&quot;,&quot;silksong_modding-ModMenu-$(ThunderstoreModMenuVersion)&quot;]}</_ManifestLine>
     </PropertyGroup>
     <WriteLinesToFile File="$(MSBuildThisFileDirectory)manifest.json" Lines="$(_ManifestLine)" Overwrite="true" WriteOnlyWhenDifferent="true" Encoding="UTF-8" />
   </Target>

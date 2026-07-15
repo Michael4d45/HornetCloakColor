@@ -201,7 +201,7 @@ namespace HornetCloakColor.Client
                 else
                 {
                     EnsureCloakShader(renderer, mat, originalShaderByRenderer);
-                    ApplyShaderProperties(mat, sprite, color, mask, effectiveSatBoost);
+                    ApplyCloakShaderProperties(mat, color, mask, effectiveSatBoost);
                     finalMode = AppliedMode.CloakApplied;
                 }
             }
@@ -221,33 +221,6 @@ namespace HornetCloakColor.Client
                 var boost = finalMode == AppliedMode.CloakApplied ? effectiveSatBoost : 0f;
                 AppliedByRenderer[rendererId] = new AppliedState(finalSharedMat.GetInstanceID(), finalColor, finalMode, boost);
             }
-        }
-
-        public static void Restore(MeshRenderer renderer, Dictionary<MeshRenderer, Shader> originalShaderByRenderer)
-        {
-            if (renderer == null) return;
-            var shared = renderer.sharedMaterial;
-            if (shared == null) return;
-            if (!shared.HasProperty(CloakShaderManager.MainTexId)) return;
-
-            var rendererId = renderer.GetInstanceID();
-            var sharedMatId = shared.GetInstanceID();
-
-            // Fast path: already restored against this exact Material instance.
-            if (AppliedByRenderer.TryGetValue(rendererId, out var prev)
-                && prev.SharedMatInstanceId == sharedMatId
-                && prev.Mode == AppliedMode.NoMaskRestored)
-            {
-                return;
-            }
-
-            var mat = renderer.material;
-            if (mat == null) return;
-            RestoreOriginalShader(renderer, mat, originalShaderByRenderer);
-
-            var finalSharedMat = renderer.sharedMaterial;
-            if (finalSharedMat != null)
-                AppliedByRenderer[rendererId] = new AppliedState(finalSharedMat.GetInstanceID(), default, AppliedMode.NoMaskRestored, 0f);
         }
 
         private static void EnsureCloakShader(
@@ -281,7 +254,7 @@ namespace HornetCloakColor.Client
             if (tex != null) mat.mainTexture = tex;
         }
 
-        private static void ApplyShaderProperties(Material mat, tk2dBaseSprite? sprite, CloakColor color, Texture2D mask, float satBoost)
+        internal static void ApplyCloakShaderProperties(Material mat, CloakColor color, Texture2D mask, float satBoost)
         {
             // Keep sprite.vertex color as authored (attack flashes, tk2d animation). The fragment
             // shader multiplies by IN.color; stomping to white broke dash/hit presentation.

@@ -129,14 +129,22 @@ namespace HornetCloakColor.Shared
     /// </summary>
     internal static class ServerAddonReceivePacketFactory
     {
-        public static IPacketData Instantiate(PacketId id) =>
-            id switch
+        public static IPacketData Instantiate(PacketId id)
+        {
+            switch (id)
             {
-                PacketId.CloakColorUpdate => new CloakColorPacket(),
-                PacketId.UsernameColorUpdate => new UsernameColorPacket(),
-                PacketId.ServerUsernameColorRules => new ServerUsernameColorRulesPacket(),
-                _ => new CloakColorPacket(),
-            };
+                case PacketId.CloakColorUpdate:
+                    return new CloakColorPacket();
+                case PacketId.UsernameColorUpdate:
+                    return new UsernameColorPacket();
+                case PacketId.ServerUsernameColorRules:
+                    return new ServerUsernameColorRulesPacket();
+                default:
+                    // Do not throw — SSMP invokes this on the network thread; an exception could crash the client.
+                    Log.Warn($"HornetCloakColor: unknown server packet id {(int)id} — using CloakColorPacket fallback.");
+                    return new CloakColorPacket();
+            }
+        }
     }
 
     /// <summary>
@@ -148,13 +156,21 @@ namespace HornetCloakColor.Shared
     /// </summary>
     internal static class ClientAddonReceivePacketFactory
     {
-        public static IPacketData Instantiate(PacketId id) =>
-            id switch
+        public static IPacketData Instantiate(PacketId id)
+        {
+            switch (id)
             {
-                PacketId.CloakColorUpdate => new PacketDataCollection<CloakColorPacket>(),
-                PacketId.UsernameColorUpdate => new PacketDataCollection<UsernameColorPacket>(),
-                PacketId.ServerUsernameColorRules => new ServerUsernameColorRulesPacket(),
-                _ => new PacketDataCollection<CloakColorPacket>(),
-            };
+                case PacketId.CloakColorUpdate:
+                    return new PacketDataCollection<CloakColorPacket>();
+                case PacketId.UsernameColorUpdate:
+                    return new PacketDataCollection<UsernameColorPacket>();
+                case PacketId.ServerUsernameColorRules:
+                    return new ServerUsernameColorRulesPacket();
+                default:
+                    // Do not throw — SSMP invokes this on the network thread; an exception could crash the client.
+                    Log.Warn($"HornetCloakColor: unknown client packet id {(int)id} — using CloakColorPacket collection fallback.");
+                    return new PacketDataCollection<CloakColorPacket>();
+            }
+        }
     }
 }

@@ -53,6 +53,12 @@ namespace HornetCloakColor.Client
         public static HashSet<string>? MissingMaskDumpAllowlist { get; private set; }
 
         /// <summary>
+        /// Prefix entries from <c>missingMaskDumpAllowlist</c> (values ending in <c>*</c>, e.g.
+        /// <c>"witch_*"</c> matches every <c>witch_…</c> frame). Checked after exact stems.
+        /// </summary>
+        public static List<string>? MissingMaskDumpAllowlistPrefixes { get; private set; }
+
+        /// <summary>
         /// When non-null and non-empty, seconds after plugin load (each value triggers one sweep) to scan
         /// <c>UnityEngine.Resources.FindObjectsOfTypeAll&lt;Texture2D&gt;()</c> for loaded textures whose names match
         /// <see cref="MissingMaskDumpAllowlist"/> and dump missing-mask files under <c>CloakMasks/Texture2D/</c>
@@ -67,6 +73,11 @@ namespace HornetCloakColor.Client
         /// lower picks up new child meshes from animations sooner. 1 = full hierarchy scan every frame (most responsive).
         /// </summary>
         public static int HeroMeshRescanIntervalFrames { get; private set; }
+
+        /// <summary>
+        /// When true, draws an on-screen overlay listing mask PNG paths for each active hero spritesheet this frame.
+        /// </summary>
+        public static bool SpritesheetOverlayText { get; private set; }
 
         public static void Load()
         {
@@ -88,6 +99,8 @@ namespace HornetCloakColor.Client
                                 Log.Info("[MapIcon] mapIconDebugLogging is true — tracing map/compass sync; grep log for \"[MapIcon]\".");
                             if (MaskResolutionDebugLogging)
                                 Log.Info("[CloakMasksDiag] maskResolutionDebugLogging is true — tracing mask path resolution; grep \"[CloakMasksDiag]\".");
+                            if (SpritesheetOverlayText)
+                                Log.Info("[SpritesheetOverlay] spritesheetOverlayText is true — on-screen mask path overlay enabled.");
                         }
                         else
                             Log.Warn("cloak_palette.json was not valid; using built-in defaults from the mod DLL.");
@@ -112,12 +125,14 @@ namespace HornetCloakColor.Client
             HeroMeshRescanIntervalFrames = 4;
             DumpDiscoveredTextures = false;
             MissingMaskDumpAllowlist = null;
+            MissingMaskDumpAllowlistPrefixes = null;
             MissingMaskDumpAllowlistSweepDelaysSec = null;
+            SpritesheetOverlayText = false;
         }
 
         private static void LogMissingMaskDumpConfigSummary()
         {
-            var n = MissingMaskDumpAllowlist?.Count ?? 0;
+            var n = (MissingMaskDumpAllowlist?.Count ?? 0) + (MissingMaskDumpAllowlistPrefixes?.Count ?? 0);
             var sweep = MissingMaskDumpAllowlistSweepDelaysSec;
             var sweepNote = sweep == null || sweep.Length == 0
                 ? "sweep=off"
@@ -143,8 +158,17 @@ namespace HornetCloakColor.Client
             if (stem.Length == 0)
                 return false;
 
-            if (MissingMaskDumpAllowlist != null && MissingMaskDumpAllowlist.Count > 0)
-                return MissingMaskDumpAllowlist.Contains(stem);
+            if (MissingMaskDumpAllowlist != null && MissingMaskDumpAllowlist.Contains(stem))
+                return true;
+
+            if (MissingMaskDumpAllowlistPrefixes != null)
+            {
+                foreach (var prefix in MissingMaskDumpAllowlistPrefixes)
+                {
+                    if (stem.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
 
             return false;
         }
@@ -187,9 +211,22 @@ namespace HornetCloakColor.Client
             if (TryExtractStringArray(trimmed, "missingMaskDumpAllowlist", out var allow))
             {
                 MissingMaskDumpAllowlist = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                MissingMaskDumpAllowlistPrefixes = new List<string>();
                 foreach (var raw in allow)
                 {
-                    var stem = NormalizeMaskDumpStem(raw);
+                    var entry = raw?.Trim();
+                    if (string.IsNullOrEmpty(entry))
+                        continue;
+
+                    if (entry.EndsWith("*", StringComparison.Ordinal))
+                    {
+                        var prefix = NormalizeMaskDumpStem(entry.TrimEnd('*'));
+                        if (prefix.Length > 0)
+                            MissingMaskDumpAllowlistPrefixes.Add(prefix);
+                        continue;
+                    }
+
+                    var stem = NormalizeMaskDumpStem(entry);
                     if (stem.Length > 0)
                         MissingMaskDumpAllowlist.Add(stem);
                 }
@@ -197,6 +234,9 @@ namespace HornetCloakColor.Client
 
             if (TryExtractFloatArray(trimmed, "missingMaskDumpAllowlistSweepDelaysSec", out var sweepDelays))
                 MissingMaskDumpAllowlistSweepDelaysSec = sweepDelays.Length > 0 ? sweepDelays : null;
+
+            if (TryExtractBool(trimmed, "spritesheetOverlayText", out var overlay))
+                SpritesheetOverlayText = overlay;
 
             return true;
         }

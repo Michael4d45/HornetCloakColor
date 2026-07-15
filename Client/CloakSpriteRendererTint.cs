@@ -34,13 +34,6 @@ namespace HornetCloakColor.Client
             }
         }
 
-        internal static void TryAttach(SpriteRenderer renderer)
-        {
-            if (renderer == null) return;
-            if (!HasMask(renderer)) return;
-            Watch(renderer);
-        }
-
         /// <summary>
         /// Attach a lightweight watcher even if the current sprite has no mask. This is needed
         /// for SpriteRenderer animations whose first masked frame appears after scene load (Unity
@@ -76,10 +69,22 @@ namespace HornetCloakColor.Client
                    || (sprite.texture != null && ContainsKnownTexture2DMaskStem(sprite.texture.name));
         }
 
+        /// <summary>
+        /// True when <paramref name="value"/> contains any animation-family prefix derived from the
+        /// mask PNGs shipped under <c>CloakMasks/Texture2D/</c> (frame digits stripped), so newly
+        /// authored families (e.g. <c>witch_down_slash_follow_up</c>) are watched without code changes.
+        /// </summary>
         private static bool ContainsKnownTexture2DMaskStem(string? value)
         {
             if (string.IsNullOrEmpty(value)) return false;
-            return value.IndexOf("diving_bell_bench_grab", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            foreach (var prefix in CloakMaskManager.GetTexture2DMaskFamilyPrefixes())
+            {
+                if (value.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+            }
+
+            return false;
         }
 
         private void Awake()
@@ -91,6 +96,11 @@ namespace HornetCloakColor.Client
         private void OnEnable()
         {
             Instances.Add(this);
+            ForceApply();
+        }
+
+        private void OnBecameVisible()
+        {
             ForceApply();
         }
 
@@ -115,13 +125,6 @@ namespace HornetCloakColor.Client
             _lastSpriteId = 0;
             _lastMaterialId = 0;
             ApplyIfNeeded(force: true);
-        }
-
-        private static bool HasMask(SpriteRenderer renderer)
-        {
-            var sprite = renderer.sprite;
-            if (sprite == null) return false;
-            return CloakMaskManager.TryGetTexture2DMask(sprite.texture, sprite.name, out _);
         }
 
         private void ApplyIfNeeded(bool force)
@@ -167,7 +170,7 @@ namespace HornetCloakColor.Client
             mat.shader = shader;
             if (tex != null) mat.mainTexture = tex;
 
-            ApplyShaderProperties(mat, _color, mask);
+            CloakMaterialApplier.ApplyCloakShaderProperties(mat, _color, mask, satBoost);
 
             var finalShared = renderer.sharedMaterial;
             _lastSpriteId = spriteId;
@@ -186,23 +189,6 @@ namespace HornetCloakColor.Client
             mat.shader = _originalShader;
             if (tex != null) mat.mainTexture = tex;
             _applied = false;
-        }
-
-        private static void ApplyShaderProperties(Material mat, CloakColor color, Texture2D mask)
-        {
-            if (color.Equals(CloakColor.Default))
-            {
-                mat.SetFloat(CloakShaderManager.StrengthId, 0f);
-                mat.SetTexture(CloakShaderManager.CloakMaskTexId, mask);
-                return;
-            }
-
-            color.ToHSV(out var h, out var s, out var v);
-            mat.SetFloat(CloakShaderManager.TargetHueId, h);
-            mat.SetFloat(CloakShaderManager.TargetSatId, s <= 0.001f ? 0f : CloakMaterialApplier.GetTextureSaturationBoost());
-            mat.SetFloat(CloakShaderManager.TargetValId, Mathf.Lerp(0.6f, 1.4f, v));
-            mat.SetFloat(CloakShaderManager.StrengthId, 1f);
-            mat.SetTexture(CloakShaderManager.CloakMaskTexId, mask);
         }
     }
 
@@ -230,42 +216,13 @@ namespace HornetCloakColor.Client
                 setter,
                 postfix: new HarmonyMethod(AccessTools.Method(typeof(CloakSpriteRendererTintPatcher), nameof(SpriteRenderer_SetSprite_Postfix))));
             Log.Info("Hooked SpriteRenderer.sprite setter for Texture2D mask tint.");
-
-            TryPatchOptionalSpriteRendererMethod(harmony, "OnEnable", nameof(SpriteRenderer_OnEnable_Postfix));
-            TryPatchOptionalSpriteRendererMethod(harmony, "OnBecameVisible", nameof(SpriteRenderer_OnBecameVisible_Postfix));
         }
 
         private static void SpriteRenderer_SetSprite_Postfix(SpriteRenderer __instance)
         {
-            try
-            {
-                CloakSpriteRendererTint.Watch(__instance);
-            }
-            catch (Exception ex)
-            {
-                Log.Warn($"CloakSpriteRendererTintPatcher: postfix threw on '{__instance?.name ?? "(null)"}': {ex.Message}");
-            }
-        }
-
-        private static void SpriteRenderer_OnEnable_Postfix(SpriteRenderer __instance)
-        {
-            SpriteRenderer_SetSprite_Postfix(__instance);
-        }
-
-        private static void SpriteRenderer_OnBecameVisible_Postfix(SpriteRenderer __instance)
-        {
-            SpriteRenderer_SetSprite_Postfix(__instance);
-        }
-
-        private static void TryPatchOptionalSpriteRendererMethod(Harmony harmony, string methodName, string postfixName)
-        {
-            var method = AccessTools.Method(typeof(SpriteRenderer), methodName);
-            if (method == null) return;
-
-            harmony.Patch(
-                method,
-                postfix: new HarmonyMethod(AccessTools.Method(typeof(CloakSpriteRendererTintPatcher), postfixName)));
-            Log.Info($"Hooked SpriteRenderer.{methodName} for Texture2D mask tint.");
+            HarmonySafe.Run(
+                () => CloakSpriteRendererTint.Watch(__instance),
+                $"CloakSpriteRendererTintPatcher: postfix threw on '{__instance?.name ?? "(null)"}'");
         }
     }
 }

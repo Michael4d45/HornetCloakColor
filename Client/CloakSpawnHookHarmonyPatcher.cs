@@ -61,22 +61,20 @@ namespace HornetCloakColor.Client
         /// </summary>
         private static void Tk2dSprite_Awake_Postfix(tk2dSprite __instance)
         {
-            try
-            {
-                var recolor = __instance.GetComponentInParent<CloakRecolor>();
-                if (recolor != null)
+            HarmonySafe.Run(
+                () =>
                 {
-                    var mr = __instance.GetComponent<MeshRenderer>();
-                    if (mr != null)
-                        recolor.RefreshMeshRendererNow(mr);
-                }
+                    var recolor = __instance.GetComponentInParent<CloakRecolor>();
+                    if (recolor != null)
+                    {
+                        var mr = __instance.GetComponent<MeshRenderer>();
+                        if (mr != null)
+                            recolor.RefreshMeshRendererNow(mr);
+                    }
 
-                CloakSceneScanner.OnSpriteSpawned(__instance);
-            }
-            catch (Exception ex)
-            {
-                Log.Warn($"CloakSpawnHookHarmonyPatcher: postfix threw on '{__instance?.name ?? "(null)"}': {ex.Message}");
-            }
+                    CloakSceneScanner.OnSpriteSpawned(__instance);
+                },
+                $"CloakSpawnHookHarmonyPatcher: postfix threw on '{__instance?.name ?? "(null)"}'");
         }
     }
 }

@@ -82,10 +82,55 @@ namespace HornetCloakColor.Client
             DumpedOriginalPaths.Clear();
             DumpedTemplatePaths.Clear();
             MaskDiagLoggedCompositeKeys.Clear();
+            _texture2DMaskFamilyPrefixes = null;
 
             // Mask Texture2D instance IDs change after a reload; force every memoized renderer
             // to take the slow path on its next Apply so it picks up the new (or now-missing) mask.
             CloakMaterialApplier.InvalidateAll();
+        }
+
+        private static string[]? _texture2DMaskFamilyPrefixes;
+
+        /// <summary>
+        /// Animation-family prefixes derived from <c>CloakMasks/Texture2D/*.png</c> stems with trailing
+        /// frame digits stripped (e.g. <c>witch_down_slash_follow_up0001.png</c> → <c>witch_down_slash_follow_up</c>).
+        /// Lets <see cref="CloakSpriteRendererTint"/> attach watchers for any authored family without
+        /// hardcoding names. Rebuilt after <see cref="OnPaletteReloaded"/>.
+        /// </summary>
+        internal static string[] GetTexture2DMaskFamilyPrefixes()
+        {
+            if (_texture2DMaskFamilyPrefixes != null) return _texture2DMaskFamilyPrefixes;
+
+            var prefixes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                var dir = Path.Combine(PluginDir, "CloakMasks", "Texture2D");
+                if (Directory.Exists(dir))
+                {
+                    foreach (var file in Directory.GetFiles(dir, "*.png"))
+                    {
+                        var stem = Path.GetFileNameWithoutExtension(file);
+                        if (stem.EndsWith("-original", StringComparison.OrdinalIgnoreCase))
+                            stem = stem[..^"-original".Length];
+
+                        var end = stem.Length;
+                        while (end > 0 && char.IsDigit(stem[end - 1]))
+                            end--;
+
+                        // Very short prefixes would match half the scene; require something meaningful.
+                        if (end >= 4)
+                            prefixes.Add(stem[..end]);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"[CloakMasks] Could not enumerate Texture2D mask family prefixes: {ex.Message}");
+            }
+
+            var result = new string[prefixes.Count];
+            prefixes.CopyTo(result);
+            return _texture2DMaskFamilyPrefixes = result;
         }
 
         /// <summary>
@@ -179,8 +224,9 @@ namespace HornetCloakColor.Client
         /// </summary>
         public static void SweepAllowlistedLoadedTexturesForMissingMaskDumps()
         {
-            var allow = CloakPaletteConfig.MissingMaskDumpAllowlist;
-            if (allow == null || allow.Count == 0 || string.IsNullOrEmpty(PluginDir))
+            var hasAllowEntries = (CloakPaletteConfig.MissingMaskDumpAllowlist?.Count ?? 0) > 0
+                                  || (CloakPaletteConfig.MissingMaskDumpAllowlistPrefixes?.Count ?? 0) > 0;
+            if (!hasAllowEntries || string.IsNullOrEmpty(PluginDir))
                 return;
 
             if (!CloakPaletteConfig.DumpDiscoveredTextures)
@@ -196,7 +242,9 @@ namespace HornetCloakColor.Client
                     continue;
 
                 var stem = CloakDiskNames.SanitizeFileStem(tex.name);
-                if (stem.Length == 0 || !allow.Contains(stem))
+                // Prefix-aware gate (exact stems + trailing-* entries); the old exact-only
+                // HashSet check silently skipped every prefix-allowlisted texture.
+                if (stem.Length == 0 || !CloakPaletteConfig.ShouldAutoDumpMissingMask(tex.name))
                     continue;
 
                 matchedAllowlistInMemory++;
@@ -207,9 +255,6 @@ namespace HornetCloakColor.Client
                     skippedMaskPngAlreadyOnDisk++;
                     continue;
                 }
-
-                if (!CloakPaletteConfig.ShouldAutoDumpMissingMask(tex.name))
-                    continue;
 
                 MaybeDumpDiscoveredTextureFiles(tex, path, createEmptyMask: true, missingMaskAutoDump: true);
                 dumped++;

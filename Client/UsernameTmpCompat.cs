@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using UnityEngine;
+using HornetCloakColor.Shared;
 
 namespace HornetCloakColor.Client
 {
@@ -18,7 +19,7 @@ namespace HornetCloakColor.Client
         {
             foreach (var tr in root.GetComponentsInChildren<Transform>(true))
             {
-                if (tr.name != "Username") continue;
+                if (tr.name != SsmpSceneNames.UsernameObjectName) continue;
                 return FindOnGameObject(tr.gameObject);
             }
 

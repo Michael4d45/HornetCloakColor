@@ -22,12 +22,15 @@ namespace HornetCloakColor
         /// Keep this in sync with &lt;Version&gt; in HornetCloakColor.csproj. The BepInAutoPlugin
         /// attribute requires a compile-time constant, so we can't read from the csproj directly.
         /// </summary>
-        public const string ModVersion = "1.15.0";
+        public const string ModVersion = "1.15.1";
 
         internal static HornetCloakColorPlugin? Instance { get; private set; }
         internal static ManualLogSource? LogSource { get; private set; }
         internal CloakColorConfig ColorConfig { get; private set; } = null!;
         internal UsernameColorConfig UsernameColorConfig { get; private set; } = null!;
+
+        private bool _ssmpWasAvailable;
+        private bool _delegatesWereWired;
 
         private void Awake()
         {
@@ -35,6 +38,7 @@ namespace HornetCloakColor
             LogSource = Logger;
 
             CloakPaletteConfig.Load();
+            CloakSpritesheetOverlay.EnsureCreated();
 
             var sweepDelays = CloakPaletteConfig.MissingMaskDumpAllowlistSweepDelaysSec;
             if (sweepDelays != null && sweepDelays.Length > 0)
@@ -70,7 +74,7 @@ namespace HornetCloakColor
 
             HeroController.OnHeroInstanceSet += OnHeroInstanceSet;
 
-            Logger.LogInfo($"{Name} v{ModVersion} loaded.");
+            Log.Info($"{Name} v{ModVersion} loaded.");
         }
 
         /// <summary>
@@ -102,8 +106,16 @@ namespace HornetCloakColor
                 if (SSMPBridge.IsAvailable && !SSMPBridge.IsRegistered)
                     TryRegisterSsmpSatelliteAndLog();
 
-                RefreshLocalUsernameVisual();
-                if (SSMPBridge.IsRegistered && UsernameNetworkDelegates.TryResolveUsernameTransform != null)
+                var delegatesReady = UsernameNetworkDelegates.TryResolveUsernameTransform != null;
+                var ssmpBecameAvailable = SSMPBridge.IsAvailable && !_ssmpWasAvailable;
+                var delegatesBecameWired = delegatesReady && !_delegatesWereWired;
+                if (ssmpBecameAvailable || delegatesBecameWired || i % 15 == 0)
+                    RefreshLocalUsernameVisual();
+
+                _ssmpWasAvailable = SSMPBridge.IsAvailable;
+                _delegatesWereWired = delegatesReady;
+
+                if (SSMPBridge.IsRegistered && delegatesReady)
                 {
                     PushLocalUsernameToNetwork();
                     PushLocalCloakColorToNetwork();
@@ -120,7 +132,7 @@ namespace HornetCloakColor
 
             if (SSMPBridge.TryRegister())
             {
-                Logger.LogInfo("SSMP detected — multiplayer cloak + username sync enabled.");
+                Log.Info("SSMP detected — multiplayer cloak + username sync enabled.");
                 PushLocalCloakColorToNetwork();
                 PushLocalUsernameToNetwork();
             }
@@ -172,7 +184,7 @@ namespace HornetCloakColor
         {
             if (CloakPaletteConfig.DebugLogging)
             {
-                Logger.LogInfo($"Cloak color changed to {color}");
+                Log.Info($"Cloak color changed to {color}");
             }
 
             if (HeroController.SilentInstance != null)

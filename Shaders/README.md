@@ -72,7 +72,7 @@ string inside the `.shader` file. The mod loader tries both plus a full scan so 
 ## Mask PNGs
 
 The mod loads mask PNGs from `CloakMasks/<tk2d collection>/<atlas>.png` next to the DLL
-(legacy `CloakMasks/<atlas>.png` is still supported). The R channel is the recolor weight.
+(then a compatibility alias folder, e.g. `Knight` for `Player Prefab`). The R channel is the recolor weight.
 
 The **CloakHueShift** fragment shader only: samples mask R × `_Strength`, then replaces hue/saturation
 while preserving value for shading.

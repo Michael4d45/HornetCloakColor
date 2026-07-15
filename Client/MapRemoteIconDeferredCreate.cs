@@ -21,6 +21,7 @@ namespace HornetCloakColor.Client
     {
         private static bool _applied;
         private static float _nextLogPendingNoGameMap;
+        private static readonly Dictionary<ushort, bool> _lastLoggedHasMapIcon = new();
 
         internal static void TryApply(Harmony harmony)
         {
@@ -85,8 +86,12 @@ namespace HornetCloakColor.Client
         private static void UpdatePlayerHasIcon_Postfix(object __instance, ushort id, bool hasMapIcon)
         {
             if (__instance == null) return;
-            if (CloakPaletteConfig.LogMapIconDiagnostics)
+            if (CloakPaletteConfig.LogMapIconDiagnostics
+                && (!_lastLoggedHasMapIcon.TryGetValue(id, out var prev) || prev != hasMapIcon))
+            {
+                _lastLoggedHasMapIcon[id] = hasMapIcon;
                 Log.Info($"[MapIcon] UpdatePlayerHasIcon(player {id}, hasIcon={hasMapIcon}) — deferred materialize pass.");
+            }
             TryMaterializePendingIcons(__instance);
         }
 

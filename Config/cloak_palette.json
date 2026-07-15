@@ -1,12 +1,15 @@
 {
-  "_comment": "Runtime recolor is mask-driven: a tk2d atlas is recolored only when CloakMasks/<tk2d collection name>/<texture>.png exists (then optional CloakMasks/<compat alias>/ e.g. Knight for Player Prefab, then legacy CloakMasks/<texture>.png). Missing masks are left untouched.",
+  "_comment": "Runtime recolor is mask-driven: a tk2d atlas is recolored only when CloakMasks/<tk2d collection name>/<texture>.png exists (then optional CloakMasks/<compat alias>/ e.g. Knight for Player Prefab). Missing masks are left untouched.",
   "debugLogging": false,
 
-  "_comment_maskDiag": "When true, logs CloakMaskManager mask path resolution (primary / alias / legacy). Optional; omit noise from debugLogging + scanner.",
+  "_comment_maskDiag": "When true, logs CloakMaskManager mask path resolution (primary / alias). Optional; omit noise from debugLogging + scanner.",
   "maskResolutionDebugLogging": false,
 
   "_comment_mapIcon": "When true, logs SSMP compass/map-icon sync (without cloak scanner noise unless debugLogging is on).",
   "mapIconDebugLogging": false,
+
+  "_comment_spritesheetOverlay": "When true, draws on-screen text listing CloakMasks/<collection>/<atlas>.png paths for each active hero spritesheet this frame.",
+  "spritesheetOverlayText": false,
 
   "_comment_heroMesh": "CloakRecolor re-scans the player MeshRenderer list every N frames; material re-apply is still every LateUpdate. Lower (e.g. 1) fixes spike-death / attack meshes appearing mid-animation; higher saves CPU.",
   "heroMeshRescanIntervalFrames": 4,
@@ -14,12 +17,14 @@
   "_comment_dumpTex": "Master switch: when false, no -original.png or empty mask templates are written (allowlist ignored). When true: existing-mask path writes -original.png beside an on-disk mask; missing-mask path uses missingMaskDumpAllowlist.",
   "dumpDiscoveredTextures": false,
 
-  "_comment_allowDump": "When dumpDiscoveredTextures is true: missing-mask dumps (-original + empty template) only for Texture.name stems in this list (tk2d folders + CloakMasks/Texture2D/). Empty allowlist = no missing-mask auto-dump.",
+  "_comment_allowDump": "When dumpDiscoveredTextures is true: missing-mask dumps (-original + empty template) only for Texture.name stems in this list (tk2d folders + CloakMasks/Texture2D/). Entries ending in * are prefix matches (e.g. \"witch_*\" matches every witch_... frame). Empty allowlist = no missing-mask auto-dump.",
   "_comment_allowDump_sactx": "Allowlisted sactx-* stems are for Texture2D sweep/auto-dump when Unity loads a Texture2D with that exact Object.name. They do not replace tk2d masks (CloakMasks/<collection>/atlasN.png). SpriteRenderer-only sequences use CloakMasks/Texture2D/<stem>.png (see CloakSpriteRendererTint).",
 
   "_comment_allowlistSweep": "When dumpDiscoveredTextures is true: optional missingMaskDumpAllowlistSweepDelaysSec — seconds after load, each value waits then scans loaded Texture2D assets for allowlisted stems still missing CloakMasks/Texture2D/<stem>.png. Example: [10, 120, 600]. Omit or [] to disable.",
 
   "missingMaskDumpAllowlist": [
+    "witch_*",
+    "cursed_death*",
     "sactx-3-2048x2048-BC7-Abyss_Last_Dive-bbfc1606.png",
     "sactx-0-1024x2048-BC7-Rage_Burst_Effect-a67539f4.png",
     "sactx-0-1024x2048-BC7-UI-6fff4be6.png",

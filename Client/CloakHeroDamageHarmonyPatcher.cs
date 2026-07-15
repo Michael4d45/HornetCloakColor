@@ -33,22 +33,34 @@ namespace HornetCloakColor.Client
                 harmony.Patch(
                     method,
                     postfix: new HarmonyMethod(
-                        AccessTools.Method(typeof(CloakHeroDamageHarmonyPatcher), nameof(AfterHeroHealthEvent))));
+                        AccessTools.Method(typeof(CloakHeroDamageHarmonyPatcher), nameof(AfterHeroTakeDamage))));
                 Log.Info($"HornetCloakColor: patched HealthManager.{method.Name} for post-damage cloak refresh.");
                 any = true;
                 break;
             }
 
             var heroType = typeof(HeroController);
-            var doSpecial = AccessTools.Method(heroType, "DoSpecialDamage", new[] { typeof(bool) });
-            if (doSpecial != null)
+            var doSpecialPatched = 0;
+            foreach (var method in heroType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
             {
+                if (method.Name != "DoSpecialDamage" || method.IsAbstract)
+                    continue;
+
                 harmony.Patch(
-                    doSpecial,
+                    method,
                     postfix: new HarmonyMethod(
                         AccessTools.Method(typeof(CloakHeroDamageHarmonyPatcher), nameof(AfterHeroHealthEvent))));
-                Log.Info("HornetCloakColor: patched HeroController.DoSpecialDamage for post-damage cloak refresh.");
+                Log.Info(
+                    $"HornetCloakColor: patched HeroController.{method.Name} for post-damage cloak refresh.");
+                doSpecialPatched++;
                 any = true;
+            }
+
+            if (doSpecialPatched == 0)
+            {
+                Log.Warn(
+                    "HornetCloakColor: HeroController.DoSpecialDamage not found (API mismatch). " +
+                    "Cloak may briefly lose tint after special damage.");
             }
 
             if (!any)
@@ -58,6 +70,26 @@ namespace HornetCloakColor.Client
             }
 
             _applied = true;
+        }
+
+        private static void AfterHeroTakeDamage(HealthManager __instance)
+        {
+            try
+            {
+                var hero = HeroController.instance;
+                if (hero == null || __instance == null)
+                    return;
+
+                if (__instance.gameObject != hero.gameObject
+                    && __instance.GetComponentInParent<HeroController>() == null)
+                    return;
+
+                CloakRecolor.NotifyHeroPossibleSpriteRebuild(hero);
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"CloakHeroDamageHarmonyPatcher: refresh threw: {ex.Message}");
+            }
         }
 
         private static void AfterHeroHealthEvent()

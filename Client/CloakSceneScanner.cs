@@ -444,10 +444,9 @@ namespace HornetCloakColor.Client
         /// </summary>
         private static bool IsUnderSsmpPlayerContainer(Transform t)
         {
-            const string prefix = "Player Container ";
             for (var p = t; p != null; p = p.parent)
             {
-                if (p.name.StartsWith(prefix, StringComparison.Ordinal))
+                if (p.name.StartsWith(SsmpSceneNames.PlayerContainerPrefix, StringComparison.Ordinal))
                     return true;
             }
 
