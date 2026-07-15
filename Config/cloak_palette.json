@@ -5,7 +5,7 @@
   "_comment_maskDiag": "When true, logs CloakMaskManager mask path resolution (primary / alias). Optional; omit noise from debugLogging + scanner.",
   "maskResolutionDebugLogging": false,
 
-  "_comment_mapIcon": "When true, logs SSMP compass/map-icon sync (without cloak scanner noise unless debugLogging is on).",
+  "_comment_mapIcon": "When true, logs map icon tint attachment (local + SSMP CreatePlayerIcon) without cloak scanner noise unless debugLogging is on.",
   "mapIconDebugLogging": false,
 
   "_comment_spritesheetOverlay": "When true, draws on-screen text listing CloakMasks/<collection>/<atlas>.png paths for each active hero spritesheet this frame.",

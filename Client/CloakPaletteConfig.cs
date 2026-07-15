@@ -29,8 +29,8 @@ namespace HornetCloakColor.Client
         internal static bool LogMaskResolutionDiagnostics => DebugLogging || MaskResolutionDebugLogging;
 
         /// <summary>
-        /// SSMP map / compass icon sync (broadcast, late-join replay, deferred <c>CreatePlayerIcon</c>).
-        /// Independent of <see cref="DebugLogging"/> so you can trace multiplayer pins without cloak spam.
+        /// Map icon tint diagnostics (local + remote <c>CreatePlayerIcon</c> postfix). Independent of
+        /// <see cref="DebugLogging"/> so you can trace tint attachment without cloak spam.
         /// </summary>
         public static bool MapIconDebugLogging { get; private set; }
 
@@ -96,7 +96,7 @@ namespace HornetCloakColor.Client
                         {
                             Log.Info($"Loaded cloak runtime config from {diskPath}.");
                             if (MapIconDebugLogging)
-                                Log.Info("[MapIcon] mapIconDebugLogging is true — tracing map/compass sync; grep log for \"[MapIcon]\".");
+                                Log.Info("[MapIcon] mapIconDebugLogging is true — tracing map icon tint; grep log for \"[MapIcon]\".");
                             if (MaskResolutionDebugLogging)
                                 Log.Info("[CloakMasksDiag] maskResolutionDebugLogging is true — tracing mask path resolution; grep \"[CloakMasksDiag]\".");
                             if (SpritesheetOverlayText)

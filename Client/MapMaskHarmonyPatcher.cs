@@ -83,24 +83,12 @@ namespace HornetCloakColor.Client
         }
 
         /// <summary>
-        /// Harmony targets loaded from SSMP when its plugin is present. Harmless if SSMP APIs drift —
-        /// patchers no-op when symbols are missing.
+        /// SSMP-only: attach <see cref="MapMaskTint"/> when remote player icons are created.
+        /// Display/broadcast/visibility are left to stock SSMP.
         /// </summary>
         private static void ApplySsmpCompanionPatches(Harmony harmony)
         {
             TryPatchSsmpCreatePlayerIcon(harmony);
-
-            // Host-only: replays remote players' map-icon state to clients entering a scene (SSMP gap).
-            ServerMapStateSyncPatcher.TryApply(harmony);
-
-            // Client: zoomed GameMap path — SSMP toggles _displayingIcons there; we mirror after compass layout + deferred icon materialize.
-            RemoteMapIconVisibility.TryApplyClientManagerHook(harmony);
-
-            // SSMP ties network HasIcon to TryGetMapPosition; replace with compass/settings-only logic (see patcher xmldoc).
-            SsmMapCompassBroadcastFixPatcher.TryApply(harmony);
-
-            // Joiners can receive HasMapIcon before GameMap exists; CreatePlayerIcon no-ops but HasMapIcon stays true with no GameObject.
-            MapRemoteIconDeferredCreate.TryApply(harmony);
         }
 
         /// <summary>Postfix on SSMP <c>MapManager.CreatePlayerIcon</c> when the SSMP plugin is loaded.</summary>
@@ -137,8 +125,6 @@ namespace HornetCloakColor.Client
             if (plugin == null) return;
 
             LocalMapMaskTint.Refresh(__instance, plugin.ColorConfig.EffectiveColor);
-            if (SSMPBridge.IsAvailable)
-                RemoteMapIconVisibility.RefreshZoomedGameMapRemoteIcons();
         }
 
         private static void InventoryWideMap_UpdatePositions_Postfix(object __instance)
