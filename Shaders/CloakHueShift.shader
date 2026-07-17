@@ -1,14 +1,24 @@
 // Shader: HornetCloakColor/CloakHueShift
 //
-// Per-pixel blend weight = mask luminosity at the same UV as _MainTex. The fragment shader reads tex2D(_CloakMaskTex).r;
-// for a typical greyscale PNG, R=G=B so .r is just the grey level (any channel would match). Multiply by _Strength from C#.
-// User tint via _TargetHue/_TargetSat/_TargetVal; lerp original RGB toward recolored RGB by that weight, then multiply by vertex color.
+// ColorFlash-compatible fork for Silksong sprites:
+//   1) Sample _MainTex
+//   2) Mask-weighted HSV cloak recolor (_CloakMaskTex.r × _Strength → lerp toward target HSV)
+//   3) Multiply by vertex color (tk2d animation / damage flashes via mesh colors)
+//   4) SpriteFlash hit flash: lerp toward _FlashColor by _FlashAmount (PascalCase — matches game)
+//
+// Flash math reconstructed from Sprites/Default-ColorFlash DXBC (see ColorFlashFlashMath.reconstructed.md).
+// We keep Blend SrcAlpha OneMinusSrcAlpha (straight alpha). Vanilla ColorFlash premultiplies in-shader
+// and typically pairs with One OneMinusSrcAlpha; changing blend here would regress existing cloaks.
 Shader "HornetCloakColor/CloakHueShift"
 {
     Properties
     {
         [PerRendererData] _MainTex ("Sprite Texture", 2D) = "white" {}
         _Color ("Material Tint", Color) = (1,1,1,1)
+
+        // Match Sprites/Default-ColorFlash — SpriteFlash writes these via MaterialPropertyBlock.
+        _FlashColor ("Flash Color", Color) = (1,1,1,1)
+        _FlashAmount ("Flash Amount", Range(0, 1)) = 0.0
 
         _TargetHue ("Target Hue (0-1)", Range(0,1)) = 0.0
         _TargetSat ("Target Saturation Multiplier", Range(0,2)) = 1.0
@@ -61,6 +71,9 @@ Shader "HornetCloakColor/CloakHueShift"
             sampler2D _CloakMaskTex;
             fixed4    _Color;
 
+            fixed4 _FlashColor;
+            float  _FlashAmount;
+
             float _TargetHue;
             float _TargetSat;
             float _TargetVal;
@@ -97,19 +110,25 @@ Shader "HornetCloakColor/CloakHueShift"
                 fixed4 tex = tex2D(_MainTex, IN.texcoord);
                 float3 t = tex.rgb;
 
+                // Cloak-only recolor (mask weight). Unmasked pixels stay original RGB.
                 float mask = tex2D(_CloakMaskTex, IN.texcoord).r * _Strength;
-
                 float3 hsv = RGBtoHSV(t);
                 float3 hsvOut = float3(_TargetHue,
                                        saturate(hsv.y * _TargetSat),
                                        saturate(hsv.z * _TargetVal));
                 float3 recolored = HSVtoRGB(hsvOut);
-
                 float3 finalRgb = lerp(t, recolored, mask);
 
+                // Vertex / material tint (same stage as ColorFlash before flash).
+                finalRgb *= IN.color.rgb;
+                float alpha = tex.a * IN.color.a;
+
+                // SpriteFlash hit flash — final-stage lerp (ColorFlash DXBC order).
+                finalRgb = lerp(finalRgb, _FlashColor.rgb, saturate(_FlashAmount));
+
                 fixed4 outCol;
-                outCol.rgb = finalRgb * IN.color.rgb;
-                outCol.a   = tex.a * IN.color.a;
+                outCol.rgb = finalRgb;
+                outCol.a   = alpha;
                 return outCol;
             }
             ENDCG

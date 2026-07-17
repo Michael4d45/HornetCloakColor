@@ -1,15 +1,20 @@
-# Cloak hue-shift shader
+# Cloak hue-shift shader (ColorFlash-compatible fork)
 
-This folder contains **CloakHueShift** (in-game: R mask × HSV tint only).
+This folder contains **CloakHueShift** — mask-weighted HSV cloak tint plus Silksong
+`Sprites/Default-ColorFlash` hit-flash (`_FlashAmount` / `_FlashColor`).
 
-The shader runs in the built-in render pipeline, sits in for `Sprites/Default`, and is
-shipped as an `AssetBundle` so the mod can ship as a single DLL.
+The shader runs in the built-in render pipeline, replaces flash-capable sprite materials
+when a cloak mask exists, and is shipped as an `AssetBundle` so the mod can ship as a single DLL.
+
+Flash blend order was reconstructed from decompiled ColorFlash DXBC (see
+`ColorFlashFlashMath.reconstructed.md`): cloak recolor → vertex tint → lerp to flash color.
 
 ## Files
 
 | File | Purpose |
 | ---- | ------- |
-| `CloakHueShift.shader` | In-game shader: samples `_CloakMaskTex.r` and applies HSV tint (no RGB distance at draw time). |
+| `CloakHueShift.shader` | Mask HSV cloak tint + `_FlashAmount`/`_FlashColor` hit flash (ColorFlash-compatible). |
+| `ColorFlashFlashMath.reconstructed.md` | Notes from decompiled `Sprites/Default-ColorFlash` GPU programs. |
 | `Editor/BuildCloakShaderBundle.cs` | Unity editor menu that builds the AssetBundle. |
 
 ## How to bake the AssetBundle
@@ -64,8 +69,9 @@ string inside the `.shader` file. The mod loader tries both plus a full scan so 
 
 ## Runtime behavior
 
-* If the bundle is embedded, the mod swaps `Sprites/Default` for `CloakHueShift`, binds the
-  per-atlas **R mask** from `CloakMasks/...`, and uploads the user's tint in HSV.
+* If the bundle is embedded, the mod swaps `Sprites/Default-ColorFlash` (and similar) for
+  `CloakHueShift`, binds the per-atlas **R mask** from `CloakMasks/...`, uploads the user's
+  tint in HSV, and leaves `SpriteFlash` MPB `_FlashAmount`/`_FlashColor` working for hit flash.
 * Missing mask PNGs are left untouched; the mod no longer bakes masks at runtime.
 * If the bundle is missing, the mod falls back to tinting the whole sprite via vertex color.
 
@@ -74,7 +80,7 @@ string inside the `.shader` file. The mod loader tries both plus a full scan so 
 The mod loads mask PNGs from `CloakMasks/<tk2d collection>/<atlas>.png` next to the DLL
 (then a compatibility alias folder, e.g. `Knight` for `Player Prefab`). The R channel is the recolor weight.
 
-The **CloakHueShift** fragment shader only: samples mask R × `_Strength`, then replaces hue/saturation
-while preserving value for shading.
+**CloakHueShift** fragment: mask R × `_Strength` → HSV recolor → vertex tint →
+`lerp(rgb, _FlashColor, _FlashAmount)` (game hit-flash contract).
 
 Re-bake the AssetBundle after **shader** changes. Mask PNG edits do not require Unity.

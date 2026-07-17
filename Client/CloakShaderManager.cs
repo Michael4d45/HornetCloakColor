@@ -9,6 +9,8 @@ namespace HornetCloakColor.Client
     /// <summary>
     /// Loads cloak shaders from a platform-specific AssetBundle embedded in the mod DLL
     /// (<c>windows/cloakshader.bundle</c>, <c>linux/cloakshader.bundle</c>, <c>mac/cloakshader.bundle</c>).
+    /// The shader is a ColorFlash-compatible fork: mask HSV recolor + <c>_FlashAmount</c>/<c>_FlashColor</c>
+    /// so SpriteFlash MPB hit flashes still draw after the material swap.
     /// </summary>
     internal static class CloakShaderManager
     {
