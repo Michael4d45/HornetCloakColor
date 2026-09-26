@@ -20,7 +20,7 @@
     <PathMap Condition="'$(Configuration)' == 'Release'">$(MSBuildProjectDirectory)=/</PathMap>
 
     <AssemblyTitle>HornetCloakColor</AssemblyTitle>
-    <Version>1.16.0</Version>
+    <Version>1.16.1</Version>
 
     <!-- Must match thunderstore/thunderstore.toml [package].namespace (used for local install folder = r2modman-style Author-Package). -->
     <ThunderstoreNamespace>Michael4d45</ThunderstoreNamespace>
@@ -67,8 +67,8 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>cloak_palette.json</Link>
     </None>
-    <!-- Shipped default / curated mask PNGs (same layout as runtime CloakMasks/). -->
-    <None Include="CloakMasks\**\*.*">
+    <!-- Shipped mask PNGs only. *-original.png files are local texture dumps, not masks. -->
+    <None Include="CloakMasks\**\*.*" Exclude="CloakMasks\**\*-original.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
@@ -117,7 +117,7 @@
       <Binaries Include="$(TargetDir)HornetCloakColor.SSMP.dll" LocalDir="/" Condition="Exists('$(TargetDir)HornetCloakColor.SSMP.dll')" />
       <Binaries Include="$(TargetDir)HornetCloakColor.SSMP.pdb" LocalDir="/" Condition="Exists('$(TargetDir)HornetCloakColor.SSMP.pdb')" />
       <Binaries Include="$(TargetDir)/cloak_palette.json" LocalDir="/" Condition="Exists('$(TargetDir)/cloak_palette.json')" />
-      <_CloakMaskShipped Include="$(MSBuildProjectDirectory)\CloakMasks\**\*.*" Condition="Exists('$(MSBuildProjectDirectory)\CloakMasks')" />
+      <_CloakMaskShipped Include="$(MSBuildProjectDirectory)\CloakMasks\**\*.*" Exclude="$(MSBuildProjectDirectory)\CloakMasks\**\*-original.png" Condition="Exists('$(MSBuildProjectDirectory)\CloakMasks')" />
     </ItemGroup>
     <PropertyGroup>
       <ThunderstoreDir>$(ProjectDir)/thunderstore</ThunderstoreDir>
