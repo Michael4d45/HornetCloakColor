@@ -2,7 +2,6 @@ using System;
 using System.Reflection;
 using HarmonyLib;
 using HornetCloakColor.Shared;
-using UnityEngine;
 
 namespace HornetCloakColor.Client
 {
@@ -23,9 +22,10 @@ namespace HornetCloakColor.Client
 
             var harmony = new Harmony(HarmonyId);
             var any = false;
+            var heroType = typeof(HeroController);
 
-            var hmType = typeof(HealthManager);
-            foreach (var method in hmType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            var takeDamagePatched = 0;
+            foreach (var method in heroType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
             {
                 if (method.Name != "TakeDamage" || method.IsAbstract)
                     continue;
@@ -33,13 +33,19 @@ namespace HornetCloakColor.Client
                 harmony.Patch(
                     method,
                     postfix: new HarmonyMethod(
-                        AccessTools.Method(typeof(CloakHeroDamageHarmonyPatcher), nameof(AfterHeroTakeDamage))));
-                Log.Info($"HornetCloakColor: patched HealthManager.{method.Name} for post-damage cloak refresh.");
+                        AccessTools.Method(typeof(CloakHeroDamageHarmonyPatcher), nameof(AfterHeroHealthEvent))));
+                Log.Info($"HornetCloakColor: patched HeroController.{method.Name} for post-damage cloak refresh.");
+                takeDamagePatched++;
                 any = true;
-                break;
             }
 
-            var heroType = typeof(HeroController);
+            if (takeDamagePatched == 0)
+            {
+                Log.Warn(
+                    "HornetCloakColor: HeroController.TakeDamage not found (API mismatch). " +
+                    "Cloak may briefly lose tint after hits.");
+            }
+
             var doSpecialPatched = 0;
             foreach (var method in heroType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
             {
@@ -72,26 +78,6 @@ namespace HornetCloakColor.Client
             _applied = true;
         }
 
-        private static void AfterHeroTakeDamage(HealthManager __instance)
-        {
-            try
-            {
-                var hero = HeroController.instance;
-                if (hero == null || __instance == null)
-                    return;
-
-                if (__instance.gameObject != hero.gameObject
-                    && __instance.GetComponentInParent<HeroController>() == null)
-                    return;
-
-                CloakRecolor.NotifyHeroPossibleSpriteRebuild(hero);
-            }
-            catch (Exception ex)
-            {
-                Log.Warn($"CloakHeroDamageHarmonyPatcher: refresh threw: {ex.Message}");
-            }
-        }
-
         private static void AfterHeroHealthEvent()
         {
             try
@@ -104,7 +90,7 @@ namespace HornetCloakColor.Client
             }
             catch (Exception ex)
             {
-                Log.Warn($"CloakHeroDamageHarmonyPatcher: refresh threw: {ex.Message}");
+                Log.Warn($"CloakHeroDamageHarmonyPatcher: refresh threw: {ex}");
             }
         }
     }

@@ -13,7 +13,7 @@ namespace HornetCloakColor.Shared
             }
             catch (Exception ex)
             {
-                Log.Warn($"{context}: {ex.Message}");
+                Log.Warn($"{context}: {ex}");
             }
         }
     }

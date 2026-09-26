@@ -13,17 +13,11 @@ namespace HornetCloakColor
     /// installed, registers SSMP addons so the color is synchronized to other players.
     /// SSMP is a <b>soft</b> dependency — without it the mod still recolors your own cloak.
     /// </summary>
-    [BepInAutoPlugin(id: "hornet.cloak.color", version: ModVersion)]
+    [BepInAutoPlugin(id: "hornet.cloak.color")]
     [BepInDependency(ModMenuPlugin.Id)]
     [BepInDependency(SSMPBridge.SSMPGuid, BepInDependency.DependencyFlags.SoftDependency)]
     public partial class HornetCloakColorPlugin : BaseUnityPlugin
     {
-        /// <summary>
-        /// Keep this in sync with &lt;Version&gt; in HornetCloakColor.csproj. The BepInAutoPlugin
-        /// attribute requires a compile-time constant, so we can't read from the csproj directly.
-        /// </summary>
-        public const string ModVersion = "1.16.0";
-
         internal static HornetCloakColorPlugin? Instance { get; private set; }
         internal static ManualLogSource? LogSource { get; private set; }
         internal CloakColorConfig ColorConfig { get; private set; } = null!;
@@ -74,7 +68,7 @@ namespace HornetCloakColor
 
             HeroController.OnHeroInstanceSet += OnHeroInstanceSet;
 
-            Log.Info($"{Name} v{ModVersion} loaded.");
+            Log.Info($"{Name} v{Version} loaded.");
         }
 
         /// <summary>

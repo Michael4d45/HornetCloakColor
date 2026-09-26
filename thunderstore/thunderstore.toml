@@ -16,7 +16,7 @@ containsNsfwContent = false
 # if you want multiplayer cloak sync. The mod runs fine in single-player without it.
 [package.dependencies]
 silksong_modding-BepInExPack_Silksong = "1.0.3"
-silksong_modding-ModMenu = "0.7.6"
+silksong_modding-ModMenu = "0.8.0"
 
 
 [build]

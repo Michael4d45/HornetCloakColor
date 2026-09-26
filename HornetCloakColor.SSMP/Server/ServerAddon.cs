@@ -12,7 +12,7 @@ namespace HornetCloakColor.Server
     internal class ServerAddon : SSMP.Api.Server.ServerAddon
     {
         protected override string Name => "HornetCloakColor";
-        protected override string Version => HornetCloakColorPlugin.ModVersion;
+        protected override string Version => HornetCloakColorPlugin.Version;
         public override uint ApiVersion => 1;
         public override bool NeedsNetwork => true;
 

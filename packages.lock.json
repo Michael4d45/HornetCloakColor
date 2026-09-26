@@ -26,9 +26,9 @@
       },
       "Hamunii.BepInEx.AutoPlugin": {
         "type": "Direct",
-        "requested": "[2.0.1, )",
-        "resolved": "2.0.1",
-        "contentHash": "UDVQtYOGU1v+xkYIRubm4zSIRtCW42kWgJ3sXIbqYSD1qSseH9gU44+zQMNRCy3BYXITtwWE3RqoyJdWUjDASA=="
+        "requested": "[2.1.0, )",
+        "resolved": "2.1.0",
+        "contentHash": "EuH0DoeBkpEiLYwCVZrlrQiNoqYi7U42+MCGpVim22erghvYYjPosEQTCHMsmyyBjLO/0NuLCu4I9aO/EkjVRQ=="
       },
       "HarmonyX": {
         "type": "Direct",
@@ -42,9 +42,9 @@
       },
       "Microsoft.Unity.Analyzers": {
         "type": "Direct",
-        "requested": "[1.25.0, )",
-        "resolved": "1.25.0",
-        "contentHash": "jOclVb2PVoOdKafuzt3bJ3BHkbjsfuAx+60yqP4zCAhlNa1rwn1Jt05qrmqJgmBY42S08hXbps9KA6QR2Z7aOA=="
+        "requested": "[1.27.0, )",
+        "resolved": "1.27.0",
+        "contentHash": "S8eU12HzdUjN++OBz7F08ft3weYbk5DR1rKKjCvpugqtdGHHC4Om8fJ/jGnJ5QMJY+SzzFHQTyQqfA1neAV+pw=="
       },
       "Silksong.GameLibs": {
         "type": "Direct",
@@ -54,15 +54,15 @@
       },
       "Silksong.ModMenu": {
         "type": "Direct",
-        "requested": "[0.7.6, )",
-        "resolved": "0.7.6",
-        "contentHash": "gr4xgZV7cFbdJ4vkkHoZmEMZA3iwv1rzpRe9c8EOnRDd90Jnmu8VLaaDIWyUV9sLPjMvHjD1748hUDkWZdT3YA==",
+        "requested": "[0.8.0, )",
+        "resolved": "0.8.0",
+        "contentHash": "2YUlTzzjZurfgAGaebqnn5gJe2oYGKTjeaugvT8+rOsMvIoDiSFFg54u/Woi51L4KFZSKvNRDFPsG/mSm075ow==",
         "dependencies": {
           "BepInEx.Core": "5.4.21",
           "HarmonyX": "2.9.0",
           "Microsoft.CodeAnalysis.Analyzers": "4.14.0",
           "Microsoft.CodeAnalysis.CSharp": "4.8.0",
-          "MonoDetour": "0.7.15",
+          "MonoDetour": "0.7.16",
           "Silksong.UnityHelper": "1.2.0",
           "UnityEngine.Modules": "6000.0.50"
         }
@@ -122,8 +122,8 @@
       },
       "MonoDetour": {
         "type": "Transitive",
-        "resolved": "0.7.15",
-        "contentHash": "7Ges3MvU0KbFb6kiV/v4EQTGEDcENlYAJlxzaUWCrenJwIBFy65Ebr4yj4AdbASQfMt6zailCAbBSdeXphmmaA==",
+        "resolved": "0.7.16",
+        "contentHash": "tTJQFX5lybRZEWoRCCXp03rQeTC0OpxXqS5BdB/mQ6gP7nLatab1XgJ1+c1b01IXgLwexTGEhd2pBm3KuvPwzg==",
         "dependencies": {
           "MonoMod.RuntimeDetour": "21.12.13.1"
         }

@@ -22,28 +22,5 @@
 
   "_comment_allowlistSweep": "When dumpDiscoveredTextures is true: optional missingMaskDumpAllowlistSweepDelaysSec — seconds after load, each value waits then scans loaded Texture2D assets for allowlisted stems still missing CloakMasks/Texture2D/<stem>.png. Example: [10, 120, 600]. Omit or [] to disable.",
 
-  "missingMaskDumpAllowlist": [
-    "witch_*",
-    "cursed_death*",
-    "sactx-3-2048x2048-BC7-Abyss_Last_Dive-bbfc1606.png",
-    "sactx-0-1024x2048-BC7-Rage_Burst_Effect-a67539f4.png",
-    "sactx-0-1024x2048-BC7-UI-6fff4be6.png",
-    "sactx-0-2048x2048-BC7-Abyss_Last_Dive-bbfc1606.png",
-    "sactx-0-2048x2048-BC7-HUD_evolve-3a10e012.png",
-    "sactx-0-2048x2048-BC7-Silk_Death_Cursed-cf30f656.png",
-    "sactx-0-2048x2048-BC7-Tools-f3fccef6.png",
-    "sactx-0-2048x2048-DXT5_BC3-Heart_Deaths-9bc2e886.png",
-    "sactx-0-4096x2048-BC7-Inventory-585c37fa.png",
-    "sactx-0-4096x4096-BC7-Hornet-edc12abe.png",
-    "sactx-0-4096x8192-BC7-HBone-496f12e3.png",
-    "sactx-0-4096x8192-BC7-Memory-b915953c.png",
-    "sactx-0-4096x8192-BC7-Peak-9f1e44cf.png",
-    "sactx-1-2048x2048-BC7-Abyss_Last_Dive-bbfc1606.png",
-    "sactx-1-2048x2048-BC7-Area_Art-14e3c68a.png",
-    "sactx-1-2048x2048-BC7-Hornet-edc12abe.png",
-    "sactx-1-2048x2048-BC7-Menu-7fcaeb67.png",
-    "sactx-1-2048x2048-DXT5_BC3-Red_Memory-8c67780c.png",
-    "sactx-2-1024x2048-BC7-Beast_Slash-ee356c00.png",
-    "sactx-2-2048x2048-BC7-Abyss_Last_Dive-bbfc1606.png"
-  ]
+  "missingMaskDumpAllowlist": []
 }

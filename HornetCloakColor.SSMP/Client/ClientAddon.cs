@@ -14,7 +14,7 @@ namespace HornetCloakColor.Client
     internal class ClientAddon : SSMP.Api.Client.ClientAddon
     {
         protected override string Name => "HornetCloakColor";
-        protected override string Version => HornetCloakColorPlugin.ModVersion;
+        protected override string Version => HornetCloakColorPlugin.Version;
         public override uint ApiVersion => 1;
         public override bool NeedsNetwork => true;
 
