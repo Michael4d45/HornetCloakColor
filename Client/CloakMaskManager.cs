@@ -295,7 +295,12 @@ namespace HornetCloakColor.Client
         /// Missing or invalid masks return <c>false</c> so callers can leave that renderer untouched.
         /// </summary>
         /// <param name="tk2dCollectionName"><c>tk2dSprite.Collection.name</c> (raw); on-disk layout tries this folder first, then compatibility aliases.</param>
-        public static bool TryGetMaskForMainTexture(Texture? mainTex, string? tk2dCollectionName, out Texture2D mask)
+        /// <param name="materialName">tk2d material name. When <paramref name="mainTex"/>'s name misses, the first token (<c>atlas0</c>) is tried in the same collection folder.</param>
+        public static bool TryGetMaskForMainTexture(
+            Texture? mainTex,
+            string? tk2dCollectionName,
+            out Texture2D mask,
+            string? materialName = null)
         {
             mask = BlackWeightMask;
 
@@ -340,10 +345,19 @@ namespace HornetCloakColor.Client
 
             var texStem = CloakDiskNames.SanitizeFileStem(
                 string.IsNullOrEmpty(mainTex.name) ? $"tex_{mainTex.GetInstanceID()}" : mainTex.name);
+            var materialStem = CloakDiskNames.MaterialSpritesheetStem(materialName);
+            if (materialStem != null && string.Equals(materialStem, texStem, StringComparison.OrdinalIgnoreCase))
+                materialStem = null;
 
             var masksDir = Path.Combine(PluginDir, "CloakMasks");
             var primaryPath = Path.Combine(masksDir, stemPrimary, $"{texStem}.png");
             var aliasPath = Path.Combine(masksDir, stemAlias, $"{texStem}.png");
+            string? materialPrimaryPath = materialStem == null
+                ? null
+                : Path.Combine(masksDir, stemPrimary, $"{materialStem}.png");
+            string? materialAliasPath = materialStem == null
+                ? null
+                : Path.Combine(masksDir, stemAlias, $"{materialStem}.png");
 
             foreach (var p in EnumerateCandidateMaskPaths(primaryPath, aliasPath))
             {
@@ -355,16 +369,34 @@ namespace HornetCloakColor.Client
                 }
             }
 
+            if (materialPrimaryPath != null && materialAliasPath != null)
+            {
+                foreach (var p in EnumerateCandidateMaskPaths(materialPrimaryPath, materialAliasPath))
+                {
+                    if (ByMaskFilePath.TryGetValue(p, out var cached) && cached != null)
+                    {
+                        ByTextureCollectionKey[compositeKey] = cached;
+                        mask = cached;
+                        return true;
+                    }
+                }
+            }
+
             if (logDetail)
             {
                 var rawCol = collectionRaw ?? "(null)";
                 var aliasNote = string.Equals(stemPrimary, stemAlias, StringComparison.Ordinal)
                     ? ""
                     : $" stemAlias='{stemAlias}'";
-                Log.Info($"[CloakMasksDiag] disk resolve start compositeKey={compositeKey} tex='{mainTex.name}' id={texId} size={mainTex.width}x{mainTex.height} collectionRaw='{rawCol}' stemPrimary='{stemPrimary}'{aliasNote} texStem='{texStem}'");
+                var matNote = materialStem != null ? $" materialStem='{materialStem}'" : "";
+                Log.Info($"[CloakMasksDiag] disk resolve start compositeKey={compositeKey} tex='{mainTex.name}' id={texId} size={mainTex.width}x{mainTex.height} collectionRaw='{rawCol}' stemPrimary='{stemPrimary}'{aliasNote} texStem='{texStem}'{matNote}");
                 Log.Info($"[CloakMasksDiag]   primary exists={File.Exists(primaryPath)} → {primaryPath}");
                 if (!string.Equals(primaryPath, aliasPath, StringComparison.OrdinalIgnoreCase))
                     Log.Info($"[CloakMasksDiag]   aliasCompat exists={File.Exists(aliasPath)} → {aliasPath}");
+                if (materialPrimaryPath != null)
+                    Log.Info($"[CloakMasksDiag]   materialStem primary exists={File.Exists(materialPrimaryPath)} → {materialPrimaryPath}");
+                if (materialAliasPath != null && !string.Equals(materialPrimaryPath, materialAliasPath, StringComparison.OrdinalIgnoreCase))
+                    Log.Info($"[CloakMasksDiag]   materialStem alias exists={File.Exists(materialAliasPath)} → {materialAliasPath}");
             }
 
             Texture2D? maskTex = null;
@@ -378,6 +410,18 @@ namespace HornetCloakColor.Client
                 resolvedPath = path;
                 resolveBranch = branch;
                 break;
+            }
+
+            if (resolvedPath == null && materialPrimaryPath != null && materialAliasPath != null)
+            {
+                foreach (var (path, branch) in EnumerateCandidateMaskPathsWithBranch(materialPrimaryPath, materialAliasPath))
+                {
+                    if (!File.Exists(path))
+                        continue;
+                    resolvedPath = path;
+                    resolveBranch = "materialStem " + branch;
+                    break;
+                }
             }
 
             if (logDetail)
@@ -418,7 +462,8 @@ namespace HornetCloakColor.Client
             maskTex.wrapMode = TextureWrapMode.Clamp;
             maskTex.filterMode = FilterMode.Bilinear;
             var folderStem = Path.GetFileName(Path.GetDirectoryName(resolvedPath)) ?? stemPrimary;
-            maskTex.name = $"CloakMask:{folderStem}/{texStem}";
+            var loadedStem = Path.GetFileNameWithoutExtension(resolvedPath) ?? texStem;
+            maskTex.name = $"CloakMask:{folderStem}/{loadedStem}";
 
             ByMaskFilePath[primaryPath] = maskTex;
             if (!string.Equals(primaryPath, resolvedPath, StringComparison.OrdinalIgnoreCase))

@@ -28,6 +28,29 @@ namespace HornetCloakColor.Client
             return tk2dCollectionName;
         }
 
+        /// <summary>
+        /// First token of a tk2d material name. Patchwork keeps this (<c>atlas0</c>) after it
+        /// replaces <c>mainTexture.name</c> with a Unity temp-buffer name.
+        /// <c>atlas0 (Instance)</c> → <c>atlas0</c>.
+        /// </summary>
+        public static string? MaterialSpritesheetStem(string? materialName)
+        {
+            if (string.IsNullOrWhiteSpace(materialName))
+                return null;
+
+            var token = materialName.Trim();
+            var space = token.IndexOf(' ');
+            if (space == 0)
+                return null;
+            if (space > 0)
+                token = token.Substring(0, space);
+
+            if (token.Length == 0 || token == "(Instance)" || token == "(Clone)")
+                return null;
+
+            return SanitizeFileStem(token);
+        }
+
         public static string SanitizeFileStem(string? name)
         {
             if (string.IsNullOrEmpty(name)) return "tex";

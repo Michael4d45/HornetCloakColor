@@ -192,7 +192,7 @@ namespace HornetCloakColor.Client
             if (hasCloakShader)
             {
                 var collectionName = sprite?.Collection != null ? sprite.Collection.name : null;
-                if (!CloakMaskManager.TryGetMaskForMainTexture(mat.mainTexture, collectionName, out var mask))
+                if (!CloakMaskManager.TryGetMaskForMainTexture(mat.mainTexture, collectionName, out var mask, mat.name))
                 {
                     RestoreOriginalShader(renderer, mat, originalShaderByRenderer);
                     finalMode = AppliedMode.NoMaskRestored;

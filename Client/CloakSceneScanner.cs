@@ -261,7 +261,7 @@ namespace HornetCloakColor.Client
             if (IsCompassIcon(renderer.transform)) return false;
 
             var collectionName = sprite.Collection != null ? (sprite.Collection.name ?? string.Empty) : string.Empty;
-            if (CloakMaskManager.TryGetMaskForMainTexture(tex, collectionName, out _))
+            if (CloakMaskManager.TryGetMaskForMainTexture(tex, collectionName, out _, shared.name))
                 return true;
 
             wouldLogMissingMask = true;
